@@ -6,11 +6,21 @@
 </head>
 <body>
 <!-- 自分の紹介コードと、申請コードの表示とコピー -->
-<p>あなたの紹介コード: <strong th:text="${referralCode}">REF-CODE</strong></p>
-<button onclick="copyToClipboard('referralCode')">コピー</button>
-<input type="text" id="referralCode" th:value="${referralCode}" readonly
-       style="opacity:0; position:absolute; left:-9999px;">
-
+<h3>あなたに割り当てられた紹介コード（残り使用可能）:</h3>
+<ul>
+    <li th:each="code : ${referralCodes}">
+        <span th:text="${code.code}">CODE</span>
+        <button onclick="copyTextToClipboard(this)">コピー</button>
+    </li>
+</ul>
+<script>
+    function copyTextToClipboard(button) {
+      const text = button.previousElementSibling.innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        alert("コピーしました: " + text);
+      });
+    }
+</script>
 <p>フレンド申請コード（あなたとつながるために使うコード）: <strong th:text="${friendRequestCode}">FRIEND-CODE</strong></p>
 <button onclick="copyToClipboard('friendCode')">コピー</button>
 <input type="text" id="friendCode" th:value="${friendRequestCode}" readonly

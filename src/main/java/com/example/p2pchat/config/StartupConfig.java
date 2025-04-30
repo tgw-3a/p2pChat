@@ -1,6 +1,6 @@
 package com.example.p2pchat.config;
 
-import com.example.p2pchat.domain.User;
+import com.example.p2pchat.Entity.User;
 import com.example.p2pchat.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -26,8 +26,10 @@ public class StartupConfig {
                 User admin = new User();
                 // 管理者のニックネームを設定
                 admin.setNickName("admin");
-                // ダミーの紹介コード（現在は固定値 "test"）
-                admin.setReferralCode("test");
+                // ダミーの紹介コードを3つ追加
+                admin.addReferralCode("testtest");
+                admin.addReferralCode("aaaabbbb");
+                admin.addReferralCode("ccccdddd");
                 // 紹介されたわけではないため "none" を設定
                 admin.setUsedReferralCode("none");
                 // パスワードをハッシュ化して保存
@@ -37,7 +39,7 @@ public class StartupConfig {
                 // 本人確認済みとしてマーク
                 admin.setVerified(true);
                 // フレンド申請コードをランダムに生成
-                admin.setFriendRequestCode(UUID.randomUUID().toString().substring(0, 8));
+                admin.setFriendRequestCode("admin1234");
                 // ユーザー情報を保存
                 userRepository.save(admin);
                 System.out.println("✅ 初期管理者ユーザー admin を作成しました");

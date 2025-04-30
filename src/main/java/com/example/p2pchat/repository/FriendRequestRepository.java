@@ -1,7 +1,7 @@
 package com.example.p2pchat.repository;
 
-import com.example.p2pchat.domain.FriendRequest;
-import com.example.p2pchat.domain.User;
+import com.example.p2pchat.Entity.FriendRequest;
+import com.example.p2pchat.Entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

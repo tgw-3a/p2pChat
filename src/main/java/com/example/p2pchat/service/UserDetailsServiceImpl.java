@@ -1,6 +1,6 @@
 package com.example.p2pchat.service;
 
-import com.example.p2pchat.domain.User;
+import com.example.p2pchat.Entity.User;
 import com.example.p2pchat.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.*;

@@ -1,4 +1,4 @@
-package com.example.p2pchat.domain;
+package com.example.p2pchat.Entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -6,6 +6,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * ユーザー情報を表すエンティティクラスです。
@@ -26,10 +28,6 @@ public class User {
     // ユーザーの表示名（ニックネーム）。一意である必要がある
     @Column(nullable = false, unique = true)
     private String nickName;
-
-    // ランダムに生成される紹介コード（1回のみ利用可）
-    @Column(nullable = true, unique = true)
-    private String referralCode;
 
     // 固定のフレンド申請用コード。他人がこれを使って申請する
     @Column(nullable = false, unique = true)
@@ -67,4 +65,17 @@ public class User {
     // 紹介コードを使って登録した日時
     private LocalDateTime usedReferralCodeCreatedAt;
 
+    // 紹介用コード（最大3つまで）。Userが他人に紹介する際に使用。
+    @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ReferralCode> referralCodes;
+
+    public void addReferralCode(String code) {
+        ReferralCode referralCode = new ReferralCode();
+        referralCode.setCode(code);
+        referralCode.setOwner(this);
+        if (this.referralCodes == null) {
+            this.referralCodes = new ArrayList<>();
+        }
+        this.referralCodes.add(referralCode);
+    }
 }

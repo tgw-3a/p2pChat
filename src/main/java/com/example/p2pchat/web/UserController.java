@@ -1,7 +1,7 @@
 package com.example.p2pchat.web;
 
-import com.example.p2pchat.domain.User;
-import com.example.p2pchat.domain.Friend;
+import com.example.p2pchat.Entity.User;
+import com.example.p2pchat.Entity.Friend;
 import com.example.p2pchat.form.UserForm;
 import com.example.p2pchat.service.UserService;
 import jakarta.validation.Valid;
@@ -62,9 +62,10 @@ public class UserController {
     public String dashboard(Model model, Principal principal) {
         User user = userService.findByNickName(principal.getName())
                 .orElseThrow(() -> new UsernameNotFoundException("ユーザーが見つかりません"));
+        model.addAttribute("referralCodes", userService.getAvailableReferralCodes(user));
         model.addAttribute("nickname", user.getNickName());
         model.addAttribute("friendRequestCode", user.getFriendRequestCode());
-        model.addAttribute("referredUsers", userService.findAllByUsedReferralCode(user.getReferralCode()));
+        model.addAttribute("referredUsers", userService.findAllByUsedReferralCodes(user));
         model.addAttribute("referredFriends", user.getReferredFriends());
         userService.findReferrer(user).ifPresent(referrer -> {
             model.addAttribute("referrer", referrer.getNickName());

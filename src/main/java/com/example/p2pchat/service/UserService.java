@@ -1,14 +1,18 @@
 package com.example.p2pchat.service;
 
+import com.example.p2pchat.repository.ReferralCodeRepository;
+import com.example.p2pchat.Entity.ReferralCode;
+
 import java.time.LocalDateTime;
 
-import com.example.p2pchat.domain.Friend;
+import com.example.p2pchat.Entity.Friend;
 import com.example.p2pchat.repository.FriendRepository;
 
-import com.example.p2pchat.domain.User;
-import com.example.p2pchat.domain.FriendRequest;
+import com.example.p2pchat.Entity.User;
+import com.example.p2pchat.Entity.FriendRequest;
 import com.example.p2pchat.repository.UserRepository;
 import com.example.p2pchat.repository.FriendRequestRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -29,19 +33,21 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final FriendRequestRepository friendRequestRepository;
+    private final ReferralCodeRepository referralCodeRepository;
 
     // 指定された紹介コードが存在し、利用可能かチェックする
     public boolean existsByReferralCode(String referralCode) {
-        Optional<User> userOpt = userRepository.findByReferralCode(referralCode);
+        Optional<User> userOpt = referralCodeRepository.findByCode(referralCode).map(ReferralCode::getOwner);
         return userOpt.isPresent() && isReferralCodeActive(userOpt.get());
     }
 
     // 紹介コードを使って新規ユーザーを登録し、紹介者と友達関係を構築する
     public void register(String usedReferralCode, String rawPassword, String nickName) {
-        if (!userRepository.existsByReferralCode(usedReferralCode)) {
+        if (referralCodeRepository.findByCode(usedReferralCode).isEmpty()) {
             throw new IllegalArgumentException("紹介コードが無効です");
         }
-        User referrer = userRepository.findByReferralCode(usedReferralCode)
+        User referrer = referralCodeRepository.findByCode(usedReferralCode)
+                .map(ReferralCode::getOwner)
                 .orElseThrow(() -> new IllegalArgumentException("紹介コードが無効です"));
 
 // 1. 枠の残数をチェック
@@ -55,13 +61,17 @@ public class UserService {
 // 3. 紹介者を保存
         userRepository.save(referrer);
 
-        String newReferralCode = UUID.randomUUID().toString().substring(0, 8);
+//        String newReferralCode = UUID.randomUUID().toString().substring(0, 8);
+        String newReferralCode;
+        do {
+            newReferralCode = UUID.randomUUID().toString().substring(0, 8);
+        } while (referralCodeRepository.existsByCode(newReferralCode));
 
         String encodedPassword = passwordEncoder.encode(rawPassword);
         User user = new User();
         user.setNickName(nickName);
         user.setUsedReferralCode(usedReferralCode); // 誰から紹介されたか
-        user.setReferralCode(newReferralCode);
+        // user.setReferralCode(newReferralCode); // 削除: referralCodeはもはや直接フィールドではない
         user.setUsedReferralCodeCreatedAt(LocalDateTime.now());
         user.setRemainingReferralSlots(5);
         user.setFriendRequestCode(UUID.randomUUID().toString().substring(0, 8));
@@ -69,10 +79,26 @@ public class UserService {
         user.setAuthority("ROLE_USER");
 
         String baseUrl = "https://example.com/register?code=";
-        String inviteLink = baseUrl + user.getReferralCode();
-        System.out.println("招待リンク: " + inviteLink); // ログに出力（将来フロントで使う）
 
         userRepository.save(user);
+        markReferralCodeAsUsed(usedReferralCode, user);
+
+        for (int i = 0; i < 3; i++) {
+            String code;
+            do {
+                code = UUID.randomUUID().toString().substring(0, 8);
+            } while (referralCodeRepository.existsByCode(code));
+
+            ReferralCode referralCode = new ReferralCode();
+            referralCode.setCode(code);
+            referralCode.setOwner(user);
+            referralCodeRepository.save(referralCode);
+        }
+
+        for (ReferralCode code : referralCodeRepository.findAllByOwner(user)) {
+            String inviteLink = baseUrl + code.getCode();
+            System.out.println("招待リンク: " + inviteLink);
+        }
 
         Friend friendship = new Friend();
         friendship.setUser(referrer);       // 紹介者
@@ -89,7 +115,7 @@ public class UserService {
 
     // 紹介コードが存在するか確認する
     public boolean isReferralCodeValid(String code) {
-        return userRepository.findByReferralCode(code).isPresent();
+        return referralCodeRepository.findByCode(code).isPresent();
     }
 
     // 紹介コードの有効期間が過ぎていないかを確認する（現在は常に有効）
@@ -111,7 +137,15 @@ public class UserService {
 
     // 現在のユーザーを紹介したユーザーを取得する
     public Optional<User> findReferrer(User user) {
-        return userRepository.findByReferralCode(user.getUsedReferralCode());
+        return referralCodeRepository.findByCode(user.getUsedReferralCode())
+                .map(ReferralCode::getOwner);
+    }
+
+    public List<User> findAllByUsedReferralCodes(User user) {
+        List<ReferralCode> codes = referralCodeRepository.findAllByOwner(user);
+        return userRepository.findAllByUsedReferralCodeIn(
+                codes.stream().map(ReferralCode::getCode).toList()
+        );
     }
 
     // 自分が解除した（非アクティブな）友達を取得する
@@ -294,4 +328,18 @@ public class UserService {
                 .filter(f -> f.getUser().equals(user)) // 自分が追加したフレンドのみ
                 .toList();
     }
+
+    // 指定ユーザーに紐づく紹介コード一覧を取得する
+    public List<ReferralCode> getAvailableReferralCodes(User user) {
+        return referralCodeRepository.findAllByOwnerAndUsedFalse(user);
+    }
+    @Transactional
+    public void markReferralCodeAsUsed(String code, User usedByUser) {
+        referralCodeRepository.findByCode(code).ifPresent(referralCode -> {
+            referralCode.setUsed(true);
+            referralCode.setUsedByUser(usedByUser);
+            referralCodeRepository.save(referralCode);
+        });
+    }
+
 }

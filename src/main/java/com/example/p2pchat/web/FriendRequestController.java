@@ -1,7 +1,7 @@
 package com.example.p2pchat.web;
 
-import com.example.p2pchat.domain.FriendRequest;
-import com.example.p2pchat.domain.User;
+import com.example.p2pchat.Entity.FriendRequest;
+import com.example.p2pchat.Entity.User;
 import com.example.p2pchat.repository.FriendRequestRepository;
 import com.example.p2pchat.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;

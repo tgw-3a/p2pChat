@@ -1,4 +1,4 @@
-package com.example.p2pchat.domain;
+package com.example.p2pchat.Entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;

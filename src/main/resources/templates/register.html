@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>ユーザー登録</title>
+</head>
+<body>
+<!-- ユーザー登録ページの見出し -->
+<h1>ユーザー登録</h1>
+
+<!-- 登録フォーム本体。ニックネーム、紹介コード、パスワードを入力 -->
+<form th:action="@{/register}" th:object="${userForm}" method="post">
+    <!-- ニックネーム入力欄 -->
+    <label for="nickName">ニックネーム:</label>
+    <input type="text" th:field="*{nickName}" id="nickName"/>
+    <div th:if="${#fields.hasErrors('nickName')}" th:errors="*{nickName}"></div>
+    <!-- 紹介コード入力欄 -->
+    <div>
+        <label>紹介コード:</label>
+        <input type="text" th:field="*{usedReferralCode}"/>
+        <span th:if="${#fields.hasErrors('usedReferralCode')}" th:errors="*{usedReferralCode}"></span>
+    </div>
+
+    <!-- パスワード入力欄 -->
+    <div>
+        <label>パスワード:</label>
+        <input type="password" th:field="*{password}"/>
+        <span th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></span>
+    </div>
+
+    <!-- フォーム送信ボタン -->
+    <div>
+        <button type="submit">登録</button>
+    </div>
+</form>
+
+</body>
+</html>

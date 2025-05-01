@@ -1,4 +1,6 @@
 package com.example.p2pchat.service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.example.p2pchat.repository.ReferralCodeRepository;
 import com.example.p2pchat.Entity.ReferralCode;
@@ -14,6 +16,7 @@ import com.example.p2pchat.repository.UserRepository;
 import com.example.p2pchat.repository.FriendRequestRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +37,8 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final FriendRequestRepository friendRequestRepository;
     private final ReferralCodeRepository referralCodeRepository;
+
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     // 指定された紹介コードが存在し、利用可能かチェックする
     public boolean existsByReferralCode(String referralCode) {
@@ -61,7 +66,6 @@ public class UserService {
 // 3. 紹介者を保存
         userRepository.save(referrer);
 
-//        String newReferralCode = UUID.randomUUID().toString().substring(0, 8);
         String newReferralCode;
         do {
             newReferralCode = UUID.randomUUID().toString().substring(0, 8);
@@ -71,12 +75,12 @@ public class UserService {
         User user = new User();
         user.setNickName(nickName);
         user.setUsedReferralCode(usedReferralCode); // 誰から紹介されたか
-        // user.setReferralCode(newReferralCode); // 削除: referralCodeはもはや直接フィールドではない
         user.setUsedReferralCodeCreatedAt(LocalDateTime.now());
         user.setRemainingReferralSlots(5);
         user.setFriendRequestCode(UUID.randomUUID().toString().substring(0, 8));
         user.setPassword(encodedPassword);
         user.setAuthority("ROLE_USER");
+        user.setCreatedAt(LocalDateTime.now());
 
         String baseUrl = "https://example.com/register?code=";
 
@@ -336,10 +340,79 @@ public class UserService {
     @Transactional
     public void markReferralCodeAsUsed(String code, User usedByUser) {
         referralCodeRepository.findByCode(code).ifPresent(referralCode -> {
-            referralCode.setUsed(true);
-            referralCode.setUsedByUser(usedByUser);
-            referralCodeRepository.save(referralCode);
+            if (!referralCode.isUsed()) {
+                referralCode.setUsed(true);
+                referralCode.setUsedByUser(usedByUser);
+                referralCodeRepository.save(referralCode);
+
+                usedByUser.setTrial(false);
+                usedByUser.setRemainingReferralSlots(3);
+
+            // 新しい紹介コード3つを発行
+                for (int i = 0; i < 3; i++) {
+                    String newCode;
+                    do {
+                        newCode = UUID.randomUUID().toString().substring(0, 8);
+                    } while (referralCodeRepository.existsByCode(newCode));
+
+                    ReferralCode newReferralCode = new ReferralCode();
+                    newReferralCode.setCode(newCode);
+                    newReferralCode.setOwner(usedByUser);
+                    referralCodeRepository.save(newReferralCode);
+                }
+
+                userRepository.save(usedByUser);
+            } else {
+                if (log != null) {
+                    log.warn("紹介コード {} はすでに使用されています", code);
+                }
+            }
         });
     }
 
+    public void verifyReferralCodeAndUpgrade(String username, String referralCode) {
+        User user = userRepository.findByNickName(username)
+                .orElseThrow(() -> new UsernameNotFoundException("ユーザーが見つかりません"));
+
+        ReferralCode code = referralCodeRepository.findByCodeAndUsedFalse(referralCode)
+                .orElseThrow(() -> new IllegalArgumentException("紹介コードが無効です"));
+
+        user.setTrial(false);
+        user.setUsedReferralCode(referralCode);
+        user.setUsedReferralCodeCreatedAt(LocalDateTime.now());
+        this.markReferralCodeAsUsed(referralCode, user);
+        userRepository.save(user);
+    }
+    public boolean isTrialExpired(User user) {
+        if (!user.isTrial()) {
+            return false; // 体験モードでなければ期限切れでない
+        }
+
+        LocalDateTime createdAt = user.getCreatedAt();
+        if (createdAt == null) {
+            return false; // 念のため、createdAt が null の場合も期限切れ扱いしない
+        }
+
+        return createdAt.plusDays(7).isBefore(LocalDateTime.now());
+    }
+
+    // 全ユーザーを取得する
+    public List<User> findAll() {
+        return userRepository.findAll();
+    }
+
+    public void registerTrialUser(String nickName, String rawPassword) {
+        if (userRepository.findByNickName(nickName).isPresent()) {
+            throw new IllegalArgumentException("このニックネームは既に使用されています");
+        }
+        User user = new User();
+        user.setNickName(nickName);
+        user.setPassword(passwordEncoder.encode(rawPassword));
+        user.setTrial(true); // ← 体験モードフラグ
+        user.setUsedReferralCode("none");
+        user.setAuthority("ROLE_USER");
+        user.setFriendRequestCode(UUID.randomUUID().toString().substring(0, 8));
+        user.setRemainingReferralSlots(0); // ← 体験ユーザーは紹介できない
+        userRepository.save(user);
+    }
 }

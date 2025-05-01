@@ -6,6 +6,8 @@ import com.example.p2pchat.form.UserForm;
 import com.example.p2pchat.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -13,6 +15,8 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.security.Principal;
 import java.util.List;
@@ -26,6 +30,16 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+
+    // trail解除用
+    @PostMapping("/trial/upgrade")
+    public String upgradeTrial(@AuthenticationPrincipal UserDetails userDetails,
+                               @RequestParam("referralCode") String referralCode,
+                               RedirectAttributes redirectAttributes) {
+        userService.verifyReferralCodeAndUpgrade(userDetails.getUsername(), referralCode);
+        redirectAttributes.addFlashAttribute("message", "制限が解除されました！");
+        return "redirect:/dashboard";
+    }
 
     // ユーザー登録画面を表示する
     @GetMapping("/register")
@@ -62,13 +76,18 @@ public class UserController {
     public String dashboard(Model model, Principal principal) {
         User user = userService.findByNickName(principal.getName())
                 .orElseThrow(() -> new UsernameNotFoundException("ユーザーが見つかりません"));
+        model.addAttribute("user", user);
         model.addAttribute("referralCodes", userService.getAvailableReferralCodes(user));
         model.addAttribute("nickname", user.getNickName());
         model.addAttribute("friendRequestCode", user.getFriendRequestCode());
         model.addAttribute("referredUsers", userService.findAllByUsedReferralCodes(user));
         model.addAttribute("referredFriends", user.getReferredFriends());
+        model.addAttribute("trialExpired", userService.isTrialExpired(user));
         userService.findReferrer(user).ifPresent(referrer -> {
-            model.addAttribute("referrer", referrer.getNickName());
+            //            model.addAttribute("referrer", referrer.getNickName());
+            model.addAttribute("referrer", userService.findReferrer(user)
+                    .map(User::getNickName)
+                    .orElse(null));
         });
         List<Friend> friends = userService.findFriends(user);
         model.addAttribute("friends", friends);

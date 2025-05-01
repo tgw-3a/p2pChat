@@ -40,6 +40,7 @@ public class StartupConfig {
                 admin.setVerified(true);
                 // フレンド申請コードをランダムに生成
                 admin.setFriendRequestCode("admin1234");
+                admin.setTrial(false);
                 // ユーザー情報を保存
                 userRepository.save(admin);
                 System.out.println("✅ 初期管理者ユーザー admin を作成しました");

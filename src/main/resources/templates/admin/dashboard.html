@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+</head>
+<body>
+<!-- 管理者専用メニュー -->
+<!-- Spring Securityのロールベースで表示制御 -->
+<div sec:authorize="hasRole('ADMIN')">
+    <h3>管理者メニュー</h3>
+    <ul>
+        <li><a th:href="@{/admin/referral-codes}">紹介コード管理</a></li>
+        <li><a th:href="@{/admin/users}">ユーザー一覧</a></li>
+        <li><a th:href="@{/admin/stats}">統計情報</a></li>
+    </ul>
+
+    <h3>ユーザー検索</h3>
+    <form th:action="@{/admin/search-users}" method="get">
+        <input type="text" name="keyword" placeholder="ニックネーム検索">
+        <button type="submit">検索</button>
+    </form>
+
+    <h3>紹介コードの発行</h3>
+    <form th:action="@{/admin/generate-referral}" method="post">
+        <input type="text" name="targetNickName" placeholder="対象ユーザーのニックネーム">
+        <button type="submit">発行</button>
+    </form>
+
+    <h3>統計情報</h3>
+    <ul>
+        <li>登録ユーザー数: <span th:text="${totalUsers}">0</span></li>
+        <li>トライアル中: <span th:text="${trialUsers}">0</span></li>
+        <li>アクティブユーザー数（過去7日）: <span th:text="${activeUsers}">0</span></li>
+    </ul>
+</div>
+<p>こんにちは、<span th:text="${user.nickName}">ユーザー名</span>さん</p>
+</body>
+</html>

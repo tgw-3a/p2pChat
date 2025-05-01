@@ -78,4 +78,16 @@ public class User {
         }
         this.referralCodes.add(referralCode);
     }
+
+    @Column(nullable = false)
+    private boolean trial = true; // 初期状態では体験モードとする
+
+    // アカウント作成日時（体験モードの期限判定などに使用）
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+    }
 }

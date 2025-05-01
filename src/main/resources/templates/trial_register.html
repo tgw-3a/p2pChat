@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head><title>体験モード登録</title></head>
+<body>
+<h2>体験モードで登録（紹介コード不要）</h2>
+<form th:action="@{/trial/register}" method="post">
+  <label>ニックネーム: <input type="text" name="nickName" required></label><br>
+  <label>パスワード: <input type="password" name="password" required></label><br>
+  <button type="submit">登録</button>
+</form>
+<p>※ 登録から7日間は体験モードとして使用できます。</p>
+</body>
+</html>

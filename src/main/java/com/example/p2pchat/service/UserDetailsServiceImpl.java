@@ -3,10 +3,12 @@ package com.example.p2pchat.service;
 import com.example.p2pchat.Entity.User;
 import com.example.p2pchat.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.AccountExpiredException;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -25,10 +27,19 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         User user = userRepository.findByNickName(nickname)
                 .orElseThrow(() -> new UsernameNotFoundException("ニックネームが見つかりません: " + nickname));
 
+        if (user.isTrial() && user.getCreatedAt() != null && user.getCreatedAt().plusDays(7).isBefore(LocalDateTime.now())) {
+            throw new AccountExpiredException("体験期間が終了しました。紹介コードを入力して解除してください。");
+        }
+
         return new org.springframework.security.core.userdetails.User(
                 user.getNickName(),
                 user.getPassword(),
                 List.of(new SimpleGrantedAuthority(user.getAuthority()))
         );
+    }
+    public boolean isTrialExpired(User user) {
+        return user.isTrial()
+                && user.getCreatedAt() != null
+                && user.getCreatedAt().plusDays(7).isBefore(LocalDateTime.now());
     }
 }

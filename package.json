@@ -1,16 +1,16 @@
 {
-  "name": "libp2p-webrtc-guide",
+  "name": "libp2p-webrtc",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "associated code for the libp2p webrtc guide",
+  "description": "associated code for the libp2p webrtc",
   "license": "ISC",
   "scripts": {
     "build": "esbuild src/main/js/libp2p.js --bundle --minify --outfile=src/main/resources/static/js/libp2p.js"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.21.3",
+    "esbuild": "^0.25.3",
     "postcss": "^8.5.3",
     "rimraf": "^5.0.7",
     "rollup-plugin-visualizer": "^5.14.0",
@@ -33,6 +33,7 @@
     "@libp2p/identify": "^2.1.1",
     "@libp2p/interface-pubsub": "^4.0.1",
     "@libp2p/logger": "^4.0.16",
+    "@libp2p/ping": "^2.0.29",
     "@libp2p/peer-id-factory": "^4.2.4",
     "@libp2p/tcp": "^9.1.1",
     "@libp2p/webrtc": "^4.1.1",

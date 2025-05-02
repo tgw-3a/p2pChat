@@ -13,6 +13,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // ニックネームでユーザーを検索（ログインや検索用）
     Optional<User> findByNickName(String nickName);
 
+    // ユーザー名からユーザーを検索（Spring Securityの認証情報と連携）
+//    Optional<User> findByUsername(String username);
+
     // 指定された紹介コードを使って登録したユーザー一覧を取得（紹介された人たち）
     List<User> findAllByUsedReferralCode(String referralCode);
 

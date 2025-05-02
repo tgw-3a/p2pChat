@@ -1,19 +1,16 @@
 package com.example.p2pchat.service;
+import com.example.p2pchat.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.example.p2pchat.repository.ReferralCodeRepository;
 import com.example.p2pchat.Entity.ReferralCode;
 
 import java.time.LocalDateTime;
 
 import com.example.p2pchat.Entity.Friend;
-import com.example.p2pchat.repository.FriendRepository;
 
 import com.example.p2pchat.Entity.User;
 import com.example.p2pchat.Entity.FriendRequest;
-import com.example.p2pchat.repository.UserRepository;
-import com.example.p2pchat.repository.FriendRequestRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -39,6 +36,7 @@ public class UserService {
     private final ReferralCodeRepository referralCodeRepository;
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
+    private OnlinePeerRepository onlinePeerRepository;
 
     // 指定された紹介コードが存在し、利用可能かチェックする
     public boolean existsByReferralCode(String referralCode) {
@@ -414,5 +412,10 @@ public class UserService {
         user.setFriendRequestCode(UUID.randomUUID().toString().substring(0, 8));
         user.setRemainingReferralSlots(0); // ← 体験ユーザーは紹介できない
         userRepository.save(user);
+    }
+    public void unregisterOnline(String nickname) {
+        User user = userRepository.findByNickName(nickname)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        onlinePeerRepository.deleteByUser(user);
     }
 }

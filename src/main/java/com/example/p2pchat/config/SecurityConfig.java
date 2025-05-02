@@ -36,6 +36,7 @@ public class SecurityConfig {
                         .requestMatchers("/login", "/trial/register", "/register", "/css/**", "/js/**", "/h2-console/**").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN") // 管理者専用
                         .requestMatchers("/dashboard","/chat").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/api/online").permitAll()
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
@@ -57,7 +58,7 @@ public class SecurityConfig {
                         .permitAll()
                 )
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/h2-console/**")
+                        .ignoringRequestMatchers("/h2-console/**","/api/online")
                 )
                 .headers(headers -> headers
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)

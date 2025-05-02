@@ -43,36 +43,14 @@ export function getPeerTypes(libp2p) {
     .map(([name, count]) => `<li>${name}: ${count}</li>`)
     .join('')
 }
-export function getPeerDetails(libp2p) {
-  return libp2p
-    .getPeers()
-    .map((peer) => {
-      const peerConnections = libp2p.getConnections(peer)
-
-      let nodeType = []
-
-      const relayMultiaddrs = libp2p.getMultiaddrs().filter((ma) => Circuit.exactMatch(ma))
-      const relayPeers = relayMultiaddrs.map((ma) => {
-        return ma
-          .stringTuples()
-          .filter(([name, _]) => name === protocols('p2p').code)
-          .map(([_, value]) => value)[0]
-      })
-
-      if (relayPeers.includes(peer.toString())) {
-        nodeType.push('relay')
-      }
-
-      return `<li>
-      <span><code>${peer.toString()}</code>${nodeType.length > 0 ? `(${nodeType.join(', ')})` : ''}</span>
-      <ul class="pl-6">${peerConnections
-        .map((conn) => {
-          return `<li class="break-all text-sm"><button class="bg-teal-500 hover:bg-teal-700 text-white px-2 mx-2 rounded focus:outline-none focus:shadow-outline" onclick="navigator.clipboard.writeText('${conn.remoteAddr.toString()}')">Copy</button>${conn.remoteAddr.toString()} </li>`
-        })
-        .join('')}</ul>
-    </li>`
-    })
-    .join('')
+// New: collectPeerDetails returns structured data for each peer (id and addrs)
+export function collectPeerDetails(libp2p) {
+  return libp2p.getPeers().map(peer => {
+    return {
+      id: peer.toString(),
+      addrs: libp2p.getConnections(peer).map(conn => conn.remoteAddr.toString())
+    }
+  })
 }
 export function update(element, newContent) {
   if (element.innerHTML !== newContent) {

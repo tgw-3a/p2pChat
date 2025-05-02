@@ -58,7 +58,14 @@ async function main() {
     services: {
       identify: identify(),
       autoNat: autoNAT(),
-      relay: circuitRelayServer(),
+      relay: circuitRelayServer({
+        // allow up to 128 reservations, max 4 per peer, 2‑minute TTL
+        reservations: {
+          maxReservations: 512,
+          maxReservationsPerPeer: 4,
+          defaultDuration: 2 * 60_000  // 2 minutes
+        }
+      }),
       pubsub: gossipsub()
     }
   })

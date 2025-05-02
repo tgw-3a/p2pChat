@@ -38,3 +38,9 @@ out/
 .idea/
 *.log
 target/
+
+src/main/resources/application-local.properties
+src/main/resources/application-prod.properties
+data/peer-id.pb
+
+node_modules

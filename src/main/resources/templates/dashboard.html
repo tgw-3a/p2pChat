@@ -1,180 +1,251 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org"
-      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
     <title>ダッシュボード</title>
+    <meta charset="UTF-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<!--    <script src="https://cdn.tailwindcss.com"></script>-->
+    // 開発中
+    <link rel="stylesheet" href="/css/output.css"/>
+    <script type="module" src="/js/bundle.js"></script>
+    <script>
+        console.log("✅ JavaScript読み込まれました");
+    </script>
 </head>
-<body>
-<!-- trialユーザーだけに表示 -->
-<div th:if="${user.trial}">
-    <p style="color: orange;">体験モード中です（登録から7日間のみ有効）。</p>
-    <p>現在、機能に制限があります。制限を解除するには、紹介コードを入力してください。</p>
-    <form th:action="@{/trial/upgrade}" method="post">
-        <input type="text" name="referralCode" placeholder="紹介コードを入力してください" required>
-        <button type="submit">制限解除</button>
-    </form>
-</div>
-<div th:if="${trialExpired}">
-    <p style="color: red; font-weight: bold;">※ 体験期間は終了しました。ログイン・機能の利用が制限されています。</p>
-    <p>継続して利用するには紹介コードを入力してください。</p>
-    <form th:action="@{/trial/upgrade}" method="post">
-        <input type="text" name="referralCode" placeholder="紹介コードを入力してください" required>
-        <button type="submit">制限解除</button>
-    </form>
-</div>
-<div th:if="${!trialExpired}">
-    <p>こんにちは、<span th:text="${user.nickName}">ユーザー名</span>さん</p>
-    <p>フレンド申請コード（あなたとつながるために使うコード）: <strong th:text="${friendRequestCode}">FRIEND-CODE</strong>
-    </p>
-    <button onclick="copyToClipboard('friendCode')">コピー</button>
-    <input type="text" id="friendCode" th:value="${friendRequestCode}" readonly
-           style="opacity:0; position:absolute; left:-9999px;">
-
-    <!-- 紹介により登録されたユーザー一覧 -->
-    <h3>あなたの紹介で登録されたユーザー:</h3>
-    <ul>
-        <li th:each="user : ${referredUsers}" th:text="${user.nickName}">ユーザー名</li>
-    </ul>
-
-    <!-- 紹介により自動的にフレンドになったユーザー一覧 -->
-    <h3>あなたの紹介で自動的にフレンドになったユーザー:</h3>
-    <ul>
-        <li th:each="friend : ${referredFriends}" th:text="${friend.nickName}">友達名</li>
-    </ul>
-    <!-- 自分を紹介してくれた人を表示 -->
-    <div th:if="${referrer}">
-        <p>あなたを紹介してくれた人: <strong th:text="${referrer}">紹介者名</strong></p>
+<body class="bg-white text-gray-900 font-sans leading-relaxed">
+<main class="container mx-auto p-6 bg-gray-200 shadow-md rounded-xl mt-10 space-y-6">
+    <!-- trialユーザーだけに表示 -->
+    <div th:if="${user.trial}">
+        <p class="mt-2" style="color: orange;">体験モード中です（登録から7日間のみ有効）。</p>
+        <p class="mt-2">現在、機能に制限があります。制限を解除するには、紹介コードを入力してください。</p>
+        <form th:action="@{/trial/upgrade}" method="post" class="flex flex-col space-y-2">
+            <input type="text" name="referralCode" placeholder="紹介コードを入力してください" required
+                   class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300">
+            <button type="submit"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                制限解除
+            </button>
+        </form>
     </div>
-    <div th:if="${referrer == null}">
-        <p>あなたは紹介なしで登録されました</p>
+    <div th:if="${trialExpired}">
+        <p class="mt-2 font-bold" style="color: red;">※
+            体験期間は終了しました。ログイン・機能の利用が制限されています。</p>
+        <p class="mt-2">継続して利用するには紹介コードを入力してください。</p>
+        <form th:action="@{/trial/upgrade}" method="post" class="flex flex-col space-y-2">
+            <input type="text" name="referralCode" placeholder="紹介コードを入力してください" required
+                   class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300">
+            <button type="submit"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                制限解除
+            </button>
+        </form>
     </div>
+    <div th:if="${!trialExpired}">
+        <div class="flex justify-between items-center mb-4">
+            <p class="mt-6 text-2xl font-extrabold text-gray-800">
+                こんにちは、<span th:text="${user.nickName}">ユーザー名</span>さん
+            </p>
+            <th:block th:replace="~{fragments/buttons :: backButton}"></th:block>
+        </div>
+        <div class="flex items-center gap-2 mt-4">
+            <p class="mb-0">フレンド申請コード（あなたとつながるために使うコード）:
+                <strong th:text="${friendRequestCode}">FRIEND-CODE</strong>
+            </p>
+            <button onclick="copyToClipboard('friendCode')"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                コピー
+            </button>
+        </div>
+        <input type="text" id="friendCode" th:value="${friendRequestCode}" readonly
+               style="opacity:0; position:absolute; left:-9999px;"
+               class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300">
 
-    <!--
-    <h3>フレンド申請を送る:</h3>
-    <form th:action="@{/friends/request}" method="post">
-      <input type="text" name="to" placeholder="相手のニックネーム" required>
-      <button type="submit">申請</button>
-    </form>
-    -->
-    <a th:href="@{/chat}">チャット画面へ</a>
-    <!-- フレンド申請コードでフレンド申請を送信 -->
-    <h3>フレンド申請コードで申請を送る:</h3>
-    <form th:action="@{/friends/requestByCode}" method="post">
-        <input type="text" name="toFriendRequestCode" placeholder="相手のフレンド申請コード" required>
-        <button type="submit">申請</button>
-    </form>
+        <!-- 紹介により登録されたユーザー一覧 -->
+        <h3 class="text-lg font-semibold border-b pb-1 mt-8">あなたの紹介で登録されたユーザー:</h3>
+        <ul class="list-disc list-inside ml-6 space-y-1">
+            <li th:each="user : ${referredUsers}" th:text="${user.nickName}">ユーザー名</li>
+        </ul>
 
-    <!-- 申請を送ったが、承認・拒否されていないリクエストの一覧 -->
-    <h3>申請済み（承認待ち）:</h3>
-    <ul>
-        <li th:each="sent : ${sentRequests}">
-            <span th:text="${sent.receiver.nickName}">申請先</span>
-            <div th:if="${!sent.cancelled}">
-                <form th:action="@{/friends/cancel}" method="post" style="display:inline;">
-                    <input type="hidden" name="requestId" th:value="${sent.id}">
-                    <button type="submit">キャンセル</button>
-                </form>
-            </div>
-            <div th:if="${sent.cancelled}">
-                <form th:action="@{/friends/resubmit}" method="post" style="display:inline;">
-                    <input type="hidden" name="requestId" th:value="${sent.id}">
-                    <button type="submit">再申請</button>
-                </form>
-                <form th:action="@{/friends/delete}" method="post" style="display:inline;">
-                    <input type="hidden" name="requestId" th:value="${sent.id}">
-                    <button type="submit">削除</button>
-                </form>
-            </div>
-        </li>
-    </ul>
+        <!-- 紹介により自動的にフレンドになったユーザー一覧 -->
+        <h3 class="text-lg font-semibold border-b pb-1 mt-8">あなたの紹介で自動的にフレンドになったユーザー:</h3>
+        <ul class="list-disc list-inside ml-6 space-y-1">
+            <li th:each="friend : ${referredFriends}" th:text="${friend.nickName}">友達名</li>
+        </ul>
+        <!-- 自分を紹介してくれた人を表示 -->
+        <div th:if="${referrer}">
+            <p class="mt-4">あなたを紹介してくれた人: <strong th:text="${referrer}">紹介者名</strong></p>
+        </div>
+        <div th:if="${referrer == null}">
+            <p class="mt-4">あなたは紹介なしで登録されました</p>
+        </div>
 
-    <!-- 自分が拒否されたリクエストの一覧（再申請可能） -->
-    <h3>拒否済みの申請:</h3>
-    <ul>
-        <li th:each="rejected : ${rejectedRequests}">
-            <span th:text="${rejected.receiver.nickName}">申請先</span>
-            <form th:action="@{/friends/undo-rejection}" method="post" style="display:inline;">
-                <input type="hidden" name="requestId" th:value="${rejected.id}">
-                <button type="submit">再申請</button>
+        <a th:href="@{/chat}"
+           class="inline-block mt-6 mb-6 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition text-lg tracking-wide">
+            💬 チャット画面へ
+        </a>
+        <!-- フレンド申請コードでフレンド申請を送信 -->
+        <div class="border-2 border-blue-300 bg-blue-50 p-4 rounded">
+            <h3 class="text-lg font-semibold border-b pb-1 mb-4">フレンド申請コードで申請を送る:</h3>
+            <form th:action="@{/friends/requestByCode}" method="post"
+                  class="flex flex-col md:flex-row gap-2 items-center">
+                <input type="text" name="toFriendRequestCode"
+                       placeholder="相手のフレンド申請コード"
+                       required
+                       class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                <button type="submit"
+                        class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                    申請
+                </button>
             </form>
-        </li>
-    </ul>
+        </div>
 
-    <!-- 自分が受け取った申請一覧（キャンセルされていないもののみ） -->
-    <h3>あなたへのフレンド申請:</h3>
-    <ul>
-        <li th:each="req : ${pendingRequests}">
-            <div th:if="!${req.cancelled}">
-                <span th:text="${req.sender.nickName}">申請者名</span>
-                <form th:action="@{/friends/accept}" method="post" style="display:inline;">
-                    <input type="hidden" name="requestId" th:value="${req.id}">
-                    <button type="submit">承認</button>
-                </form>
-                <form th:action="@{/friends/reject}" method="post" style="display:inline;">
-                    <input type="hidden" name="requestId" th:value="${req.id}">
-                    <button type="submit">拒否</button>
-                </form>
-            </div>
-        </li>
-    </ul>
+        <!-- 申請を送ったが、承認・拒否されていないリクエストの一覧 -->
+        <h3 class="text-lg font-semibold border-b pb-1 mt-8">申請済み（承認待ち）:</h3>
+        <ul class="list-disc list-inside ml-6 space-y-1">
+            <li th:each="sent : ${sentRequests}">
+                <span th:text="${sent.receiver.nickName}">申請先</span>
+                <div th:if="${!sent.cancelled}">
+                    <form th:action="@{/friends/cancel}" method="post" style="display:inline;"
+                          class="flex items-center gap-2 flex-wrap">
+                        <input type="hidden" name="requestId" th:value="${sent.id}">
+                        <button type="submit"
+                                class="bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                            キャンセル
+                        </button>
+                    </form>
+                </div>
+                <div th:if="${sent.cancelled}">
+                    <form th:action="@{/friends/resubmit}" method="post" style="display:inline;"
+                          class="flex items-center gap-2 flex-wrap">
+                        <input type="hidden" name="requestId" th:value="${sent.id}">
+                        <button type="submit"
+                                class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                            再申請
+                        </button>
+                    </form>
+                    <form th:action="@{/friends/delete}" method="post" style="display:inline;"
+                          class="flex items-center gap-2 flex-wrap">
+                        <input type="hidden" name="requestId" th:value="${sent.id}">
+                        <button type="submit"
+                                class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                            削除
+                        </button>
+                    </form>
+                </div>
+            </li>
+        </ul>
 
-    <!-- 双方がフレンド状態のユーザー一覧 -->
-    <h3>現在の友達:</h3>
-    <ul>
-        <li th:each="f : ${friends}">
-            <span th:text="${f.friend.nickName}">友達名</span>
-            <form th:action="@{/friends/remove}" method="post" style="display:inline;">
-                <input type="hidden" name="friendId" th:value="${f.friend.id}">
-                <button type="submit">解除</button>
-            </form>
-        </li>
-    </ul>
-    <!-- 自分から解除した友達一覧（復元可能） -->
-    <h3>解除された友達:</h3>
-    <ul>
-        <li th:each="f : ${inactiveFriends}">
-            <div th:if="${f.user.nickName == #authentication.name}">
+        <!-- 自分が拒否されたリクエストの一覧（再申請可能） -->
+        <h3 class="text-lg font-semibold border-b pb-1 mt-8">拒否済みの申請:</h3>
+        <ul class="list-disc list-inside ml-6 space-y-1">
+            <li th:each="rejected : ${rejectedRequests}">
+                <span th:text="${rejected.receiver.nickName}">申請先</span>
+                <form th:action="@{/friends/undo-rejection}" method="post" style="display:inline;"
+                      class="flex items-center gap-2 flex-wrap">
+                    <input type="hidden" name="requestId" th:value="${rejected.id}">
+                    <button type="submit"
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                        再申請
+                    </button>
+                </form>
+            </li>
+        </ul>
+
+        <!-- 自分が受け取った申請一覧（キャンセルされていないもののみ） -->
+        <h3 class="text-lg font-semibold border-b pb-1 mt-8">あなたへのフレンド申請:</h3>
+        <ul class="list-disc list-inside ml-6 space-y-1">
+            <li th:each="req : ${pendingRequests}">
+                <div th:if="!${req.cancelled}">
+                    <span th:text="${req.sender.nickName}">申請者名</span>
+                    <form th:action="@{/friends/accept}" method="post" style="display:inline;"
+                          class="flex items-center gap-2 flex-wrap">
+                        <input type="hidden" name="requestId" th:value="${req.id}">
+                        <button type="submit"
+                                class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                            承認
+                        </button>
+                    </form>
+                    <form th:action="@{/friends/reject}" method="post" style="display:inline;"
+                          class="flex items-center gap-2 flex-wrap">
+                        <input type="hidden" name="requestId" th:value="${req.id}">
+                        <button type="submit"
+                                class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                            拒否
+                        </button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+
+        <!-- 双方がフレンド状態のユーザー一覧 -->
+        <h3 class="text-lg font-semibold border-b pb-1 mt-8">現在の友達:</h3>
+        <ul class="list-disc list-inside ml-6 space-y-1">
+            <li th:each="f : ${friends}">
                 <span th:text="${f.friend.nickName}">友達名</span>
-                <form th:action="@{/friends/restore}" method="post" style="display:inline;">
+                <form th:action="@{/friends/remove}" method="post" style="display:inline;"
+                      class="flex items-center gap-4 flex-wrap">
                     <input type="hidden" name="friendId" th:value="${f.friend.id}">
-                    <button type="submit">復元</button>
+                    <button type="submit"
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                        解除
+                    </button>
                 </form>
-            </div>
-        </li>
-    </ul>
-    <!-- 自分の紹介コードと、申請コードの表示とコピー -->
-    <h3>あなたに割り当てられた紹介コード（残り使用可能）:</h3>
-    <ul>
-        <li th:each="code : ${referralCodes}">
-            <span th:text="${code.code}">CODE</span>
-            <button onclick="copyTextToClipboard(this)">コピー</button>
-        </li>
-    </ul>
-    <script>
-        function copyTextToClipboard(button) {
-          const text = button.previousElementSibling.innerText;
-          navigator.clipboard.writeText(text).then(() => {
-            alert("コピーしました: " + text);
-          });
-        }
-    </script>
+            </li>
+        </ul>
+        <!-- 自分から解除した友達一覧（復元可能） -->
+        <h3 class="text-lg font-semibold border-b pb-1 mt-8">解除された友達:</h3>
+        <ul class="list-disc list-inside ml-6 space-y-1">
+            <li th:each="f : ${inactiveFriends}">
+                <div th:if="${f.user.nickName == #authentication.name}">
+                    <span th:text="${f.friend.nickName}">友達名</span>
+                    <form th:action="@{/friends/restore}" method="post" style="display:inline;"
+                          class="flex items-center gap-2 flex-wrap">
+                        <input type="hidden" name="friendId" th:value="${f.friend.id}">
+                        <button type="submit"
+                                class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                            復元
+                        </button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+        <!-- 自分の紹介コードと、申請コードの表示とコピー -->
+        <h3 class="text-lg font-semibold border-b pb-1 mt-8">あなたに割り当てられた紹介コード（残り使用可能）:</h3>
+        <ul class="list-disc list-inside ml-6 space-y-1">
+            <li th:each="code : ${referralCodes}" class="flex items-center gap-4">
+                <span th:text="${code.code}">CODE</span>
+                <button onclick="copyTextToClipboard(this)"
+                        class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                    コピー
+                </button>
+            </li>
+        </ul>
+        <script>
+            function copyTextToClipboard(button) {
+              const text = button.previousElementSibling.innerText;
+              navigator.clipboard.writeText(text).then(() => {
+                alert("コピーしました: " + text);
+              });
+            }
+        </script>
 
-    <div th:if="${!user.trial}">
-        <p>現在はフル機能モードです。すべての機能をご利用いただけます。</p>
+        <div th:if="${!user.trial}">
+            <p class="mt-4">現在はフル機能モードです。すべての機能をご利用いただけます。</p>
+        </div>
+
+        <!-- コピー機能用のJavaScript -->
+        <script>
+            function copyToClipboard(id) {
+              const copyText = document.getElementById(id);
+              copyText.select();
+              copyText.setSelectionRange(0, 99999); // For mobile devices
+              navigator.clipboard.writeText(copyText.value).then(() => {
+                alert("コピーしました: " + copyText.value);
+              });
+            }
+        </script>
     </div>
-
-    <!-- コピー機能用のJavaScript -->
-    <script>
-        function copyToClipboard(id) {
-          const copyText = document.getElementById(id);
-          copyText.select();
-          copyText.setSelectionRange(0, 99999); // For mobile devices
-          navigator.clipboard.writeText(copyText.value).then(() => {
-            alert("コピーしました: " + copyText.value);
-          });
-        }
-    </script>
-</div>
+</main>
 </body>
 </html>

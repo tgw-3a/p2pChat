@@ -1,13 +1,38 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head><title>体験モード登録</title></head>
-<body>
-<h2>体験モードで登録（紹介コード不要）</h2>
-<form th:action="@{/trial/register}" method="post">
-  <label>ニックネーム: <input type="text" name="nickName" required></label><br>
-  <label>パスワード: <input type="password" name="password" required></label><br>
-  <button type="submit">登録</button>
-</form>
-<p>※ 登録から7日間は体験モードとして使用できます。</p>
+<head>
+    <title>体験モード登録</title>
+    <meta charset="UTF-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <script src="https://cdn.tailwindcss.com"></script> // 開発中
+    <!--    <link rel="stylesheet" href="/css/output.css"/> // 本番用-->
+<!--    <script type="module" src="/js/bundle.js"></script>-->
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans leading-relaxed">
+<main class="container mx-auto p-6 bg-gray-200 shadow-md rounded-xl mt-10 space-y-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="font-bold text-2xl text-blue-700">体験モードで登録（紹介コード不要）</h2>
+        <th:block th:replace="~{fragments/buttons :: backButton}"></th:block>
+    </div>
+
+    <form th:action="@{/trial/register}" method="post" class="space-y-4">
+        <label class="block text-gray-700 font-bold">ニックネーム:
+            <input
+                class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4"
+                type="text"
+                name="nickName" required>
+        </label>
+        <label class="block text-gray-700 font-bold">パスワード:
+            <input
+                class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4"
+                type="password"
+                name="password" required>
+        </label>
+        <button class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition" type="submit">登録</button>
+    </form>
+
+    <p class="text-sm text-gray-600 mt-6 leading-relaxed">※ 登録から7日間は体験モードとして使用できます。</p>
+</main>
 </body>
 </html>

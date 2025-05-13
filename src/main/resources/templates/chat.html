@@ -1,60 +1,118 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org"
-      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" data-theme="gruvbox-dark">
 <head>
+    <title>チャット</title>
     <meta charset="UTF-8"/>
     <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>チャット</title>
-    <link href="/css/output.css" rel="stylesheet"/>
-    <script defer src="/js/libp2p.js"></script>
+        <script src="https://cdn.tailwindcss.com"></script>
+    // 開発中
+<!--    <link rel="stylesheet" href="/css/output.css"/>-->
+    <script type="module" src="/js/bundle.js"></script>
     <script th:inline="javascript">
         const RELAY_MULTIADDR = [[${relayMultiaddr}]];
     </script>
+    <script>
+        console.log("✅ JavaScript読み込まれました");
+    </script>
 </head>
-<body class="bg-gray-100 text-gray-900 font-sans leading-relaxed">
-<main class="container mx-auto p-6 bg-white shadow-md rounded-lg mt-10">
-    <h1 class="font-bold text-2xl text-blue-600 mb-4">チャット</h1>
-    <h2 th:text="'ようこそ、' + ${nickName} + ' さん！'" class="text-lg mb-4">ようこそ！</h2>
-    <div id="chat-box" style="border:1px solid #ccc; height:200px; overflow:auto; margin-bottom:10px;" role="log" aria-live="polite">
+<body class="bg-gray-50 text-gray-900 font-sans leading-relaxed">
+<main class="container mx-auto p-6 bg-gray-200 shadow-md rounded-xl mt-10 space-y-6">
+    <header class="mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <h1 class="font-bold text-3xl text-blue-600">チャット</h1>
+                <h2 th:text="'ようこそ、' + ${nickName} + ' さん！'" class="mt-2 text-2xl font-bold">ようこそ！</h2>
+            </div>
+            <div class="text-right">
+                <div class="flex gap-4">
+                    <th:block th:replace="~{fragments/buttons :: backButton}"></th:block>
+                    <th:block th:replace="~{fragments/buttons :: dashboardButton}"></th:block>
+                </div>
+            </div>
+        </div>
+    </header>
+    <span>ステータス: <span id="status-text" class="font-bold text-red-600">オフライン</span></span>
+    <div class="mt-1">
+        <button id="go-online"
+                class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+            オンラインになる
+        </button>
+        <button id="go-offline"
+                class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+            オフラインになる
+        </button>
     </div>
-    <div class="mb-4">
-      <span>ステータス: <span id="status-text" class="font-bold text-red-600">オフライン</span></span>
-      <button id="go-online" class="bg-green-500 text-white px-2 py-1 rounded ml-4">オンラインになる</button>
-      <button id="go-offline" class="bg-gray-500 text-white px-2 py-1 rounded ml-2">オフラインになる</button>
-      <p class="text-red-500 text-sm mt-2">
+    <p class="text-red-500 text-sm mt-1">
         ※ ブラウザを閉じる前に必ず「オフラインになる」ボタンを押してください。
-      </p>
-    </div>
-    <h3>オンラインの友達</h3>
-    <ul id="online-friends-list"></ul>
+    </p>
+    <section id="chat-box"
+             class="bg-white border border-gray-300 h-96 overflow-auto p-4 rounded shadow-sm"
+             role="log"
+             aria-live="polite">
+    </section>
 
-    <form id="chat-form" novalidate>
-        <input type="text" id="chat-input" placeholder="メッセージを入力" style="width:80%;">
-        <button type="submit" id="chat-send-button">送信</button>
+    <form id="chat-form" novalidate class="flex space-x-4">
+        <input
+                type="text"
+                id="chat-input"
+                placeholder="メッセージを入力"
+                class="flex-grow bg-white border-2 border-blue-500 rounded-md px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+        <button
+                type="submit"
+                id="chat-send-button"
+                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded shadow"
+        >
+            送信
+        </button>
     </form>
 
-    <ul class="list-disc list-inside mb-6">
-        <li>
-            Opened sessions in the last <span id="output-webtransport-opened-per-unit">0s</span>:
-            <span id="output-webtransport-opened-per-minute">0</span>
-        </li>
-        <li>
-            Max opened connections per minute: <span id="output-webtransport-max-opened-per-minute">0</span>
-        </li>
-        <li>
-            <button id="button-logging-enable" class="bg-blue-500 hover:bg-blue-700 text-white px-1 rounded">Enable
-                libp2p Logging
-            </button>
-            <button id="button-logging-disable" class="bg-red-500 hover:bg-red-700 text-white px-1 rounded">Disable
-                libp2p Logging
-            </button>
-        </li>
-    </ul>
+    <section>
+        <h3 class="font-semibold text-lg text-gray-800 mb-2">友達リスト</h3>
+        <ul id="static-friend-list" class="list-disc list-inside space-y-1 text-gray-700 mb-4">
+            <li th:each="fn : ${friendNames}" th:text="${fn}"
+                class="inline-block bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded shadow transition">
+            </li>
+        </ul>
 
-    <section class="my-4">
+        <ul id="online-friends-list" class="space-y-2 text-gray-700 mb-4">
+            <li th:each="fn : ${onlineFriends}" class="flex items-center gap-3">
+                <span th:text="${fn}" class="text-gray-800 font-semibold"></span>
+                <button type="button"
+                        class="bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded shadow text-sm"
+                        th:attr="data-user=${fn}">
+                    発信
+                </button>
+            </li>
+        </ul>
+    </section>
+
+    <section class="bg-white p-4 rounded shadow space-y-4">
+        <ul class="list-none text-gray-700 space-y-2">
+            <li>
+                Opened sessions in the last <span id="output-webtransport-opened-per-unit">0s</span>:
+                <span id="output-webtransport-opened-per-minute">0</span>
+            </li>
+            <li>
+                Max opened connections per minute: <span id="output-webtransport-max-opened-per-minute">0</span>
+            </li>
+            <li class="space-x-2">
+                <button id="button-logging-enable"
+                        class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded">Enable
+                    libp2p Logging
+                </button>
+                <button id="button-logging-disable"
+                        class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded">Disable
+                    libp2p Logging
+                </button>
+            </li>
+        </ul>
+    </section>
+
+    <section class="bg-white p-4 rounded shadow space-y-4">
         <h2 class="font-bold text-xl text-blue-600 mb-2">Node</h2>
-        <ul class="list-disc list-inside ml-4">
+        <ul class="list-disc list-inside ml-4 text-gray-700 space-y-1">
             <li>Peer ID: <span class="font-bold" id="output-node-peer-id">Unknown</span></li>
             <li>Status: <span id="output-node-status">Initialising</span></li>
             <li>
@@ -68,12 +126,12 @@
         </ul>
     </section>
 
-    <section class="my-6">
+    <section class="bg-white p-4 rounded shadow space-y-4">
         <h2 class="font-bold text-xl text-blue-600 mb-2">Peers</h2>
-        <p class="flex flex-row items-center gap-2">
-            <label class="block text-gray-700 text-sm font-bold" for="input-multiaddr">Multiaddr</label>
+        <div class="flex flex-row items-center gap-2">
+            <label class="block text-gray-700 text-sm font-semibold" for="input-multiaddr">Multiaddr</label>
             <input
-                    class="shadow appearance-none border rounded w-full py-2 px-2 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    class="bg-white shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     id="input-multiaddr"
                     type="text"
                     placeholder="/ip4/..."
@@ -85,13 +143,15 @@
             >
                 Connect
             </button>
-        </p>
+        </div>
 
-        <ul class="list-disc list-inside ml-4" id="output-peer-details"></ul>
+        <ul class="list-disc list-inside ml-4 text-gray-700" id="output-peer-details"></ul>
     </section>
 
-    <h2 class="font-bold text-xl text-blue-600 mb-2">Output</h2>
-    <pre class="bg-gray-100 p-4 rounded shadow-inner" id="output"></pre>
+    <section class="bg-white p-4 rounded shadow">
+        <h2 class="font-bold text-xl text-blue-600 mb-2">Output</h2>
+        <pre class="bg-gray-200 p-4 rounded shadow-inner" id="output"></pre>
+    </section>
 
     <hr class="my-6 border-gray-300"/>
 </main>

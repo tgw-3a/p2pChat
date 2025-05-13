@@ -1,38 +1,52 @@
 <!DOCTYPE html>
 <html lang="ja" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
     <title>ユーザー登録</title>
+    <meta charset="UTF-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    // 開発中
+    <!--    <link rel="stylesheet" href="/css/output.css"/> // 本番用-->
+    <!--    <script type="module" src="/js/bundle.js"></script>-->
 </head>
-<body>
-<!-- ユーザー登録ページの見出し -->
-<h1>ユーザー登録</h1>
-
-<!-- 登録フォーム本体。ニックネーム、紹介コード、パスワードを入力 -->
-<form th:action="@{/register}" th:object="${userForm}" method="post">
-    <!-- ニックネーム入力欄 -->
-    <label for="nickName">ニックネーム:</label>
-    <input type="text" th:field="*{nickName}" id="nickName"/>
-    <div th:if="${#fields.hasErrors('nickName')}" th:errors="*{nickName}"></div>
-    <!-- 紹介コード入力欄 -->
-    <div>
-        <label>紹介コード:</label>
-        <input type="text" th:field="*{usedReferralCode}"/>
-        <span th:if="${#fields.hasErrors('usedReferralCode')}" th:errors="*{usedReferralCode}"></span>
+<body class="bg-gray-50 text-gray-900 font-sans leading-relaxed">
+<main class="container mx-auto p-6 bg-gray-200 shadow-md rounded-xl mt-10 space-y-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="font-bold text-2xl text-blue-700 mb-4">ユーザー登録（紹介コード必須）</h2>
+        <th:block th:replace="~{fragments/buttons :: backButton}"></th:block>
     </div>
+    <form th:action="@{/register}" th:object="${userForm}" method="post">
+        <label class="block text-gray-700 font-bold">
+            ニックネーム:
+            <input type="text" th:field="*{nickName}"
+                   class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4"/>
+        </label>
+        <span th:if="${#fields.hasErrors('nickName')}" th:errors="*{nickName}" class="text-red-500 text-sm mb-2"></span>
 
-    <!-- パスワード入力欄 -->
-    <div>
-        <label>パスワード:</label>
-        <input type="password" th:field="*{password}"/>
-        <span th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></span>
-    </div>
+        <label class="block text-gray-700 font-bold">
+            紹介コード:
+            <input type="text" th:field="*{usedReferralCode}"
+                   class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4"/>
+        </label>
+        <span th:if="${#fields.hasErrors('usedReferralCode')}" th:errors="*{usedReferralCode}"
+              class="text-red-500 text-sm mb-2"></span>
 
-    <!-- フォーム送信ボタン -->
-    <div>
-        <button type="submit">登録</button>
-    </div>
-</form>
+        <label class="block text-gray-700 font-bold">
+            パスワード:
+            <input type="password" th:field="*{password}"
+                   class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4"/>
+        </label>
+        <span th:if="${#fields.hasErrors('password')}" th:errors="*{password}" class="text-red-500 text-sm mb-2"></span>
 
+        <div>
+            <button type="submit"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                登録
+            </button>
+        </div>
+    </form>
+    <p class="text-sm text-gray-600 mt-6 leading-relaxed">※ 紹介コードが必要です。無効なコードでは登録できません。</p>
+</main>
 </body>
 </html>

@@ -1,5 +1,6 @@
 package com.example.p2pchat.web;
 
+import com.example.p2pchat.Entity.Friend;
 import com.example.p2pchat.Entity.OnlinePeer;
 import com.example.p2pchat.Entity.User;
 import com.example.p2pchat.repository.FriendRepository;
@@ -58,7 +59,7 @@ public class OnlinePeerController {
 
         List<User> myFriends = friendRepository.findAllByUser(me)
             .stream()
-            .map(friend -> friend.getFriend())
+            .map(Friend::getFriend)
             .toList();
 
         return onlinePeerRepository.findAll().stream()

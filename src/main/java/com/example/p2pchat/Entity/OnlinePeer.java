@@ -1,8 +1,13 @@
 package com.example.p2pchat.Entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 
+@Setter
+@Getter
 @Entity
 public class OnlinePeer {
 
@@ -22,35 +27,4 @@ public class OnlinePeer {
 
     // Getters and Setters
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public void setUser(User user) {
-        this.user = user;
-    }
-
-    public String getMultiaddr() {
-        return multiaddr;
-    }
-
-    public void setMultiaddr(String multiaddr) {
-        this.multiaddr = multiaddr;
-    }
-
-    public LocalDateTime getLastSeenAt() {
-        return lastSeenAt;
-    }
-
-    public void setLastSeenAt(LocalDateTime lastSeenAt) {
-        this.lastSeenAt = lastSeenAt;
-    }
 }

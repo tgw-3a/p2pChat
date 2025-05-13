@@ -33,9 +33,9 @@ public class SecurityConfig {
         http
                 .userDetailsService(userDetailsService)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login", "/trial/register", "/register", "/css/**", "/js/**", "/h2-console/**").permitAll()
+                        .requestMatchers("/", "/login", "/trial/register", "/register", "/css/**", "/js/**", "/h2-console/**").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN") // 管理者専用
-                        .requestMatchers("/dashboard","/chat").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/dashboard", "/chat").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/online").permitAll()
                         .anyRequest().authenticated()
                 )
@@ -58,7 +58,7 @@ public class SecurityConfig {
                         .permitAll()
                 )
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/h2-console/**","/api/online")
+                        .ignoringRequestMatchers("/h2-console/**", "/api/online")
                 )
                 .headers(headers -> headers
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)

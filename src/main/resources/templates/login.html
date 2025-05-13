@@ -1,22 +1,40 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
     <title>ログイン</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    // 開発中
+    <!--    <link rel="stylesheet" href="/css/output.css"/> // 本番用-->
+    <!--    <script type="module" src="/js/bundle.js"></script>-->
 </head>
-<body>
-<!-- ログイン画面のタイトル -->
-<h2>ログイン</h2>
-<!-- ログインエラーが発生した場合のメッセージ表示 -->
-<div th:if="${param.error}" style="color:red;">ユーザー名またはパスワードが正しくありません</div>
-<!-- ログインフォーム（ユーザー名とパスワード） -->
-<form th:action="@{/login}" method="post">
-    <label for="username">ユーザー名</label>
-    <input type="text" name="username" id="username"><br>
-    <label for="password">パスワード</label>
-    <input type="password" name="password" id="password"><br>
-    <!-- ログインボタン -->
-    <button type="submit">ログイン</button>
-</form>
+<body class="bg-gray-50 text-gray-900 font-sans leading-relaxed">
+<main class="container mx-auto p-6 bg-gray-200 shadow-md rounded-xl mt-10 space-y-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="font-bold text-2xl text-blue-700 mb-4">ログイン</h2>
+        <th:block th:replace="~{fragments/buttons :: backButton}"></th:block>
+    </div>
+
+    <div th:if="${param.error}" class="text-red-500 font-bold mb-2">
+        ユーザー名またはパスワードが正しくありません
+    </div>
+    <form th:action="@{/login}" method="post" class="space-y-4">
+        <label class="block text-gray-700 font-bold">ユーザー名:
+            <input
+                    class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4"
+                    type="text" name="username" id="username" required>
+        </label>
+        <label class="block text-gray-700 font-bold">パスワード:
+            <input
+                    class="bg-white shadow-sm border border-gray-300 rounded-md w-full py-2 px-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 mb-4"
+                    type="password" name="password" id="password" required>
+        </label>
+        <button type="submit"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+            ログイン
+        </button>
+    </form>
+</main>
 </body>
 </html>

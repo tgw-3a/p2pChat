@@ -6,11 +6,17 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
-
-import java.util.UUID;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Controller
 public class TrialController {
+
+    private static final Logger logger = LoggerFactory.getLogger(TrialController.class);
 
     @Autowired
     private UserService userService;
@@ -22,8 +28,22 @@ public class TrialController {
 
     @PostMapping("/trial/register")
     public String registerTrialUser(@RequestParam String nickName,
-                                    @RequestParam String password) {
+                                    @RequestParam String password,
+                                    HttpServletRequest request,
+                                    HttpServletResponse response) {
         userService.registerTrialUser(nickName, password);
-        return "redirect:/login?trial=true";
+
+        // 現在の認証状態を確認
+        if (SecurityContextHolder.getContext().getAuthentication() == null
+                || !SecurityContextHolder.getContext().getAuthentication().isAuthenticated()) {
+            try {
+                request.login(nickName, password);
+            } catch (ServletException e) {
+                logger.error("自動ログインに失敗しました", e);
+                return "redirect:/login?error=autologin_failed";
+            }
+        }
+
+        return "redirect:/dashboard";
     }
 }

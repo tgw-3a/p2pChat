@@ -44,3 +44,8 @@ src/main/resources/application-prod.properties
 data/peer-id.pb
 
 node_modules
+.env
+
+# ビルド生成物
+src/main/resources/static/js/bundle.js
+src/main/resources/static/css/output.css

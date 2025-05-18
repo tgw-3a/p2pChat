@@ -1,0 +1,14 @@
+FROM node:23-slim
+WORKDIR /relay
+
+COPY package.json package-lock.json ./
+COPY relay.js generate-multiaddr.js esbuild.js ./
+COPY data ./data
+COPY src ./src
+COPY entrypoint-relay.sh ./
+
+#RUN npm ci
+RUN npm install
+RUN chmod +x entrypoint-relay.sh
+
+ENTRYPOINT ["./entrypoint-relay.sh"]

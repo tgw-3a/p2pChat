@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:14
+    volumes:
+      - ../shared/db:/var/lib/postgresql/data
+    environment:
+      TZ: Asia/Tokyo
+    env_file:
+      - ../shared/.env
+    networks:
+      - net
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile_java
+    volumes:
+      - relay_data:/relay-artifacts:ro
+    env_file:
+      - ../shared/.env
+    environment:
+      RELAY_ENV_PATH: /relay-share/relay.env
+      TZ: Asia/Tokyo
+    depends_on:
+      - db
+      - relay
+    networks:
+      - net
+
+  nginx:
+    image: nginx:stable-alpine
+    ports: []
+    volumes:
+      - ../shared/nginx/conf.d:/etc/nginx/conf.d:ro
+    environment:
+      TZ: Asia/Tokyo
+    env_file:
+      - ../shared/.env
+    depends_on:
+      - web
+    networks:
+      - net
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    depends_on:
+      - nginx
+    env_file:
+      - ../shared/.env
+    networks:
+      - net
+
+  relay:
+    build:
+      context: .
+      dockerfile: Dockerfile_relay
+    volumes:
+      - relay_data:/relay-artifacts
+    environment:
+      TZ: Asia/Tokyo
+    networks:
+      - net
+
+volumes:
+  postgres-data:
+  relay_data:
+
+networks:
+  net:

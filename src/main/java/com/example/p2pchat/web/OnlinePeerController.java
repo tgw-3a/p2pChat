@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -54,6 +56,10 @@ public class OnlinePeerController {
 
     @GetMapping
     public List<OnlinePeerDto> getFriendsOnline(@AuthenticationPrincipal UserDetails userDetails) {
+        if (userDetails == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ログインが必要です");
+        }
+
         User me = userRepository.findByNickName(userDetails.getUsername())
             .orElseThrow(() -> new IllegalArgumentException("User not found"));
 

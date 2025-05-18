@@ -24,7 +24,7 @@ import path from 'path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const peerIdPath = path.resolve(__dirname, 'data/peer-id.pb')
+const peerIdPath = path.resolve(__dirname, 'data/peerId.pb')
 
 async function loadOrCreatePeerId() {
   try {

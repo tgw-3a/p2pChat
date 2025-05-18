@@ -28,13 +28,14 @@ const decoder = new TextDecoder()
 let targetPeerIdStr = null;
 // peerIdStr -> Array<Connection>
 const connMap = new Map();
-
+const RELAY_MULTIADDR = process.env.RELAY_MULTIADDR;
+console.log("📡 RELAY_MULTIADDR at libp2p setup:", RELAY_MULTIADDR);
 const App = async () => {
   const libp2p = await createLibp2p({
      addresses: {
        listen: [
          '/webrtc',
-       ],
+ 	],
      },
     transports: [
       webSockets({
@@ -53,9 +54,7 @@ const App = async () => {
     },
     peerDiscovery: [
       bootstrap({
-        list: [
-          typeof RELAY_MULTIADDR !== 'undefined' ? RELAY_MULTIADDR : ''
-        ],
+        list: [RELAY_MULTIADDR],
         interval: 30_000
       }),
     ],

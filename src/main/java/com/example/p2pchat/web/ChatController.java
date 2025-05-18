@@ -10,13 +10,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class ChatController {
 
-    @Value("${relay.multiaddr}")
-    private String relayMultiaddr;
+//    @Value("${relay.multiaddr}")
+//    private String relayMultiaddr;
 
     @GetMapping("/chat")
     public String chat(Model model, @AuthenticationPrincipal UserDetails userDetails) {
         model.addAttribute("nickName", userDetails.getUsername());
-        model.addAttribute("relayMultiaddr", relayMultiaddr);
+//        model.addAttribute("relayMultiaddr", relayMultiaddr);
         return "chat";
     }
 }

@@ -6,13 +6,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
-import static org.springframework.security.config.Customizer.withDefaults;
 
 /**
  * Spring Security の設定クラスです。
@@ -34,9 +31,9 @@ public class SecurityConfig {
                 .userDetailsService(userDetailsService)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/login", "/trial/register", "/register", "/css/**", "/js/**", "/h2-console/**").permitAll()
-                        .requestMatchers("/admin/**").hasRole("ADMIN") // 管理者専用
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/dashboard", "/chat").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers("/api/online").permitAll()
+                        .requestMatchers("/api/online/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
@@ -58,7 +55,7 @@ public class SecurityConfig {
                         .permitAll()
                 )
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/h2-console/**", "/api/online")
+                        .ignoringRequestMatchers("/h2-console/**", "/api/online/**")
                 )
                 .headers(headers -> headers
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
@@ -74,5 +71,4 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-
 }

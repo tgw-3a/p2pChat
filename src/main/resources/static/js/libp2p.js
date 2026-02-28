@@ -232,7 +232,7 @@ const App = async () => {
         container.appendChild(li)
       })
     }
-  })
+  }, 1000)
 
   DOM.loggingButtonEnable().onclick = (e) => {
     enable('*,*:debug')
@@ -403,31 +403,42 @@ async function sendMessageToPeer(conn, message) {
       }
     }
 
+    function pickPreferredOnlineAddr() {
+      const addrs = libp2p.getMultiaddrs().map(a => a.toString());
+      return addrs.find(a => a.includes("/p2p-circuit"))
+        || addrs.find(a => a.includes("/webrtc"))
+        || addrs[0];
+    }
+
+    async function resolveOnlineAddr(maxTry = 10) {
+      for (let i = 0; i < maxTry; i++) {
+        const addr = pickPreferredOnlineAddr();
+        if (addr) return addr;
+        await new Promise(r => setTimeout(r, 300));
+      }
+      return null;
+    }
+
     const runOnlineSetup = () => {
       loadOnlineFriends();
-      setInterval(loadOnlineFriends, 1000);
+      setInterval(loadOnlineFriends, 5000);
 
       document.getElementById("go-online").addEventListener("click", async () => {
         console.log("🕐 オンラインボタンが押されました");
-        setTimeout(async () => {
-          const addr = libp2p.getMultiaddrs()[0]?.toString();
-          if (addr) {
-            console.log("🔗 Multiaddr 取得成功:", addr);
-            await setOnline(addr);
-          } else {
-            console.warn("⚠️ Multiaddr がまだ取得できません");
-          }
-        }, 200);       // ← small delay for address propagation
+        const addr = await resolveOnlineAddr();
+        if (addr) {
+          console.log("🔗 Multiaddr 取得成功:", addr);
+          await setOnline(addr);
+        } else {
+          console.warn("⚠️ Multiaddr が取得できません");
+        }
       });
 
       document.getElementById("go-offline").addEventListener("click", setOffline);
 
       window.addEventListener("beforeunload", () => {
         if (isOnline) {
-          const addr = libp2p.getMultiaddrs()[0]?.toString();
-          if (addr) {
-            navigator.sendBeacon("/api/online", addr);
-          }
+          navigator.sendBeacon("/api/online/offline-beacon", "offline");
         }
       });
     }

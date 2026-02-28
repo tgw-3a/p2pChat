@@ -6,19 +6,18 @@ import com.example.p2pchat.repository.FriendRequestRepository;
 import com.example.p2pchat.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * フレンド申請に関する各種操作（申請、承認、拒否、キャンセル、再申請など）を処理するコントローラーです。
- * ユーザーが送受信するフレンド申請のルーティングを提供します。
  */
 @Controller
 @RequiredArgsConstructor
@@ -28,8 +27,6 @@ public class FriendRequestController {
     private final UserService userService;
     private final FriendRequestRepository friendRequestRepository;
 
-
-    // ニックネームを指定してフレンド申請を送信する
     @PostMapping("/request")
     public String sendFriendRequest(@AuthenticationPrincipal UserDetails userDetails,
                                     @RequestParam("to") String toNickName,
@@ -38,14 +35,18 @@ public class FriendRequestController {
         return "redirect:" + request.getHeader("Referer");
     }
 
-    // フレンド申請を承認して友達関係を構築する
     @PostMapping("/accept")
     public String acceptFriendRequest(@RequestParam("requestId") Long requestId,
+                                      @AuthenticationPrincipal UserDetails userDetails,
                                       HttpServletRequest request) {
-        userService.acceptFriendRequest(requestId);
+        try {
+            userService.acceptFriendRequest(userDetails.getUsername(), requestId);
+        } catch (AccessDeniedException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        }
         return "redirect:" + request.getHeader("Referer");
     }
-    // フレンド申請コードを指定して申請を送信する
+
     @PostMapping("/requestByCode")
     public String sendFriendRequestByFriendRequestCode(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -55,30 +56,31 @@ public class FriendRequestController {
         userService.sendFriendRequestByFriendRequestCode(userDetails.getUsername(), toFriendRequestCode);
         return "redirect:" + request.getHeader("Referer");
     }
-//    @PostMapping("/requestByFriendRequestCode")
-//    public String sendFriendRequestByFriendRequestCode(@AuthenticationPrincipal UserDetails userDetails,
-//                                                      @RequestParam("toFriendRequestCode") String toFriendRequestCode,
-//                                                      HttpServletRequest request) {
-//        userService.sendFriendRequestByFriendRequestCode(userDetails.getUsername(), toFriendRequestCode);
-//        return "redirect:" + request.getHeader("Referer");
-//    }
-    // フレンド申請を拒否状態にする
+
     @PostMapping("/reject")
     public String rejectFriendRequest(@RequestParam("requestId") Long requestId,
+                                      @AuthenticationPrincipal UserDetails userDetails,
                                       HttpServletRequest request) {
-        userService.markFriendRequestAsRejected(requestId);
+        try {
+            userService.markFriendRequestAsRejected(userDetails.getUsername(), requestId);
+        } catch (AccessDeniedException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        }
         return "redirect:" + request.getHeader("Referer");
     }
 
-    // 拒否された申請を再申請可能な状態に戻す
     @PostMapping("/undo-rejection")
     public String undoRejection(@RequestParam("requestId") Long requestId,
+                                @AuthenticationPrincipal UserDetails userDetails,
                                 HttpServletRequest request) {
-        userService.undoRejectedFriendRequest(requestId);
+        try {
+            userService.undoRejectedFriendRequest(userDetails.getUsername(), requestId);
+        } catch (AccessDeniedException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        }
         return "redirect:" + request.getHeader("Referer");
     }
 
-    // 自分から見た友達関係を解除（非アクティブ化）する
     @PostMapping("/remove")
     public String removeFriend(@AuthenticationPrincipal UserDetails userDetails,
                                @RequestParam("friendId") Long friendId,
@@ -91,7 +93,6 @@ public class FriendRequestController {
         return "redirect:" + request.getHeader("Referer");
     }
 
-    // 解除された友達関係を復元する
     @PostMapping("/restore")
     public String restoreFriend(@AuthenticationPrincipal UserDetails userDetails,
                                 @RequestParam("friendId") Long friendId,
@@ -104,7 +105,6 @@ public class FriendRequestController {
         return "redirect:" + request.getHeader("Referer");
     }
 
-    // ダッシュボードを表示し、送受信した申請や友達情報を画面に渡す
     @GetMapping("/dashboard")
     public String showDashboard(@AuthenticationPrincipal UserDetails userDetails, Model model) {
         var currentUser = userService.findByNickName(userDetails.getUsername())
@@ -116,7 +116,6 @@ public class FriendRequestController {
         return "dashboard";
     }
 
-    // 自分が送信したフレンド申請をキャンセル状態にする
     @PostMapping("/cancel")
     public String cancelFriendRequest(@RequestParam Long requestId,
                                       @AuthenticationPrincipal UserDetails userDetails) {
@@ -136,7 +135,6 @@ public class FriendRequestController {
         return "redirect:/dashboard";
     }
 
-    // キャンセル状態の申請を再申請する（キャンセルフラグを解除）
     @PostMapping("/resubmit")
     public String resubmitFriendRequest(@RequestParam Long requestId,
                                         @AuthenticationPrincipal UserDetails userDetails) {
@@ -156,7 +154,6 @@ public class FriendRequestController {
         return "redirect:/dashboard";
     }
 
-    // フレンド申請を完全に削除する
     @PostMapping("/delete")
     public String deleteFriendRequest(@RequestParam Long requestId,
                                       @AuthenticationPrincipal UserDetails userDetails) {

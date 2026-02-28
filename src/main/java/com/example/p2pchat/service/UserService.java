@@ -13,6 +13,7 @@ import com.example.p2pchat.Entity.User;
 import com.example.p2pchat.Entity.FriendRequest;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -34,9 +35,9 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final FriendRequestRepository friendRequestRepository;
     private final ReferralCodeRepository referralCodeRepository;
+    private final OnlinePeerRepository onlinePeerRepository;
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
-    private OnlinePeerRepository onlinePeerRepository;
 
     // 指定された紹介コードが存在し、利用可能かチェックする
     public boolean existsByReferralCode(String referralCode) {
@@ -175,8 +176,8 @@ public class UserService {
         }
 
         // allow resubmission only if previous is cancelled or rejected is true
-        if (friendRequestRepository.existsBySenderAndReceiverAndRejectedTrue(sender, receiver)) {
-            throw new IllegalArgumentException("申請済みです。再申請する場合は申請を削除するか、キャンセル欄から再申請を押してください");
+        if (friendRequestRepository.existsBySenderAndReceiverAndAcceptedFalseAndCancelledFalseAndRejectedFalse(sender, receiver)) {
+            throw new IllegalArgumentException("すでに申請中です");
         }
 
         FriendRequest request = new FriendRequest();
@@ -204,7 +205,7 @@ public class UserService {
             throw new IllegalArgumentException("すでに友達です");
         }
 
-        if (friendRequestRepository.existsBySenderAndReceiverAndRejectedTrue(sender, receiver)) {
+        if (friendRequestRepository.existsBySenderAndReceiverAndAcceptedFalseAndCancelledFalseAndRejectedFalse(sender, receiver)) {
             throw new IllegalArgumentException("すでに申請中です");
         }
 
@@ -223,9 +224,12 @@ public class UserService {
     }
 
     // フレンド申請を承認し、双方向の友達関係を作成する
-    public void acceptFriendRequest(Long requestId) {
+    public void acceptFriendRequest(String currentNickname, Long requestId) {
         FriendRequest request = friendRequestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("申請が見つかりません"));
+        if (!request.getReceiver().getNickName().equals(currentNickname)) {
+            throw new AccessDeniedException("この申請を承認する権限がありません");
+        }
 
         if (request.isAccepted()) {
             return; // すでに承認済み
@@ -259,17 +263,23 @@ public class UserService {
     }
 
     // 申請を拒否状態にする（削除の代わり）
-    public void markFriendRequestAsRejected(Long requestId) {
+    public void markFriendRequestAsRejected(String currentNickname, Long requestId) {
         FriendRequest request = friendRequestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("申請が見つかりません"));
+        if (!request.getReceiver().getNickName().equals(currentNickname)) {
+            throw new AccessDeniedException("この申請を拒否する権限がありません");
+        }
         request.setRejected(true);
         friendRequestRepository.save(request);
     }
 
     // 拒否状態を解除して、再申請を可能にする
-    public void undoRejectedFriendRequest(Long requestId) {
+    public void undoRejectedFriendRequest(String currentNickname, Long requestId) {
         FriendRequest request = friendRequestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("申請が見つかりません"));
+        if (!request.getReceiver().getNickName().equals(currentNickname)) {
+            throw new AccessDeniedException("この申請の拒否を解除する権限がありません");
+        }
         request.setRejected(false);
         request.setRequestedAt(LocalDateTime.now());
         friendRequestRepository.save(request);
@@ -411,6 +421,7 @@ public class UserService {
         user.setAuthority("ROLE_USER");
         user.setFriendRequestCode(UUID.randomUUID().toString().substring(0, 8));
         user.setRemainingReferralSlots(0); // ← 体験ユーザーは紹介できない
+        user.setCreatedAt(LocalDateTime.now());
         userRepository.save(user);
     }
     public void unregisterOnline(String nickname) {

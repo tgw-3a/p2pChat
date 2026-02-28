@@ -436,6 +436,14 @@ async function sendMessageToPeer(conn, message) {
 
       document.getElementById("go-offline").addEventListener("click", setOffline);
 
+      // オンライン状態を維持するために定期heartbeatを送る
+      setInterval(async () => {
+        if (!isOnline) return;
+        const addr = await resolveOnlineAddr(3);
+        if (!addr) return;
+        await setOnline(addr);
+      }, 20_000);
+
       window.addEventListener("beforeunload", () => {
         if (isOnline) {
           navigator.sendBeacon("/api/online/offline-beacon", "offline");

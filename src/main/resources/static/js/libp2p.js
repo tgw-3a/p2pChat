@@ -223,7 +223,10 @@ const App = async () => {
     if (idStr) {
       console.log('⚡ peer disconnect', idStr);
       connMap.delete(idStr);          // ← remove stale connections
-      if (targetPeerIdStr === idStr) targetPeerIdStr = null;  // reset auto‑target if needed
+      if (targetPeerIdStr === idStr) {
+        // Keep selected target so sendWithRetry can auto-redial on next send.
+        console.log("ℹ️ 選択中peerが切断されました。送信時に自動再接続を試行します");
+      }
     } else {
       console.warn('⚡ peer disconnect (detail missing):', e);
       // detailが取れない場合でも現行接続からマップを再構築して整合を取る
@@ -231,7 +234,6 @@ const App = async () => {
       for (const peerIdStr of Array.from(connMap.keys())) {
         if (!active.has(peerIdStr)) connMap.delete(peerIdStr);
       }
-      if (targetPeerIdStr && !active.has(targetPeerIdStr)) targetPeerIdStr = null;
     }
   });
 

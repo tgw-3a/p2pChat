@@ -1,0 +1,15 @@
+services:
+  db:
+    restart: unless-stopped
+  web:
+    restart: unless-stopped
+  relay:
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:19001:9001"
+  nginx:
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18080:80"
+  cloudflared:
+    profiles: ["disabled"]

@@ -51,8 +51,7 @@ async function main() {
     },
     transports: [webSockets(), tcp()],
     connectionEncryption: [noise()],
-    // Relay 側も keepalive を有効化して切断を抑制
-    streamMuxers: [yamux({ keepAlive: true })],
+    streamMuxers: [yamux()],
     connectionGater: {
       denyDialMultiaddr: async () => false
     },
@@ -60,11 +59,11 @@ async function main() {
       identify: identify(),
       autoNat: autoNAT(),
       relay: circuitRelayServer({
+        // allow up to 128 reservations, max 4 per peer, 2‑minute TTL
         reservations: {
           maxReservations: 512,
           maxReservationsPerPeer: 4,
-          // 1時間保持（2分では短すぎて切断が多発）
-          defaultDuration: 60 * 60_000
+          defaultDuration: 60 * 60_000  // 2 minutes
         }
       }),
       pubsub: gossipsub()

@@ -11,12 +11,12 @@ import { webRTC, webRTCDirect } from '@libp2p/webrtc'
 import { circuitRelayTransport, circuitRelayServer } from '@libp2p/circuit-relay-v2'
 import { enable, disable } from '@libp2p/logger'
 import { update, getPeerTypes, getAddresses, collectPeerDetails } from './utils'
+import * as filters from '@libp2p/websockets/filters'
 import { bootstrap } from '@libp2p/bootstrap'
 import { pipe } from 'it-pipe'
 import { toString as uint8ArrayToString } from 'uint8arrays/to-string'
 import { peerIdFromString } from '@libp2p/peer-id'
 // ping responder
-import { ping } from '@libp2p/ping'
 
 
 const CHAT_PROTOCOL = '/chat/1.0.0'
@@ -38,13 +38,7 @@ const App = async () => {
      },
     transports: [
       webSockets({
-        // HTTPS page must not dial insecure/local ws endpoints.
-        filter: (ma) => {
-          const s = ma.toString()
-          const isSecureWs = s.includes('/wss') || s.includes('/tls/ws')
-          const isDnsName = s.includes('/dns4/') || s.includes('/dns6/') || s.includes('/dnsaddr/')
-          return isSecureWs && isDnsName
-        },
+        filter: filters.dnsWss,
       }),
       webTransport(),
       webRTC(),
@@ -55,22 +49,7 @@ const App = async () => {
     connectionEncryption: [noise()],
     streamMuxers: [yamux({ keepAlive: true })],
     connectionGater: {
-      denyDialMultiaddr: async (ma) => {
-        const s = ma.toString()
-
-        // On HTTPS origin, plain ws is blocked by browser mixed-content policy.
-        const isInsecureWs = s.includes('/ws') && !s.includes('/wss') && !s.includes('/tls/ws')
-        if (isInsecureWs) return true
-
-        // Never dial loopback/private docker addresses from browser.
-        const isLocalOrPrivate =
-          s.includes('/ip4/127.') ||
-          s.includes('/ip4/10.') ||
-          s.includes('/ip4/192.168.') ||
-          /\/ip4\/172\.(1[6-9]|2\d|3[0-1])\./.test(s)
-
-        return isLocalOrPrivate
-      },
+      denyDialMultiaddr: async () => false,
     },
     peerDiscovery: [
       bootstrap({
@@ -82,7 +61,6 @@ const App = async () => {
       pubsub: gossipsub(),
       identify: identify(),
       // respond to /ipfs/ping/1.0.0 so remote peers can measure latency
-      ping: ping(),
     },
   })
 
@@ -156,20 +134,6 @@ const App = async () => {
 
   // Start the libp2p node so handlers and transports are active
   await libp2p.start();
-
-  // Keep relay connection alive so temporary socket drops do not leave user offline.
-  if (RELAY_MULTIADDR) {
-    const ensureRelayConnection = async () => {
-      try {
-        await libp2p.dial(multiaddr(RELAY_MULTIADDR))
-      } catch (_) {
-        // ignore and retry on next tick
-      }
-    }
-
-    await ensureRelayConnection()
-    setInterval(ensureRelayConnection, 15000)
-  }
 
   globalThis.libp2p = libp2p
 
@@ -428,6 +392,10 @@ async function sendMessageToPeer(conn, message) {
         await fetch("/api/online", {
           method: "DELETE",
         });
+        for (const c of libp2p.getConnections()) {
+          try { await c.close(); } catch (_) {}
+        }
+        targetPeerIdStr = null;
         document.getElementById("status-text").textContent = "🔴オフライン";
         document.getElementById("status-text").classList.replace("text-green-600", "text-red-600");
         isOnline = false;
@@ -469,14 +437,6 @@ async function sendMessageToPeer(conn, message) {
       });
 
       document.getElementById("go-offline").addEventListener("click", setOffline);
-
-      // オンライン状態を維持するために定期heartbeatを送る
-      setInterval(async () => {
-        if (!isOnline) return;
-        const addr = await resolveOnlineAddr(3);
-        if (!addr) return;
-        await setOnline(addr);
-      }, 20_000);
 
       window.addEventListener("beforeunload", () => {
         if (isOnline) {

@@ -20,6 +20,7 @@ import { peerIdFromString } from '@libp2p/peer-id'
 
 
 const CHAT_PROTOCOL = '/chat/1.0.0'
+const KEEPALIVE_PAYLOAD = "__p2pchat_keepalive__"
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -161,6 +162,10 @@ const App = async () => {
           } catch {/* ignore */}
         }
         if (!message) continue;
+        if (message === KEEPALIVE_PAYLOAD) {
+          console.debug("💓 keepalive received");
+          continue;
+        }
 
         console.log('📥 受信メッセージ:', message);
 
@@ -449,7 +454,7 @@ const App = async () => {
   window.peerId = libp2p.peerId
 
   // 新しいメッセージ送信関数: 既存ConnectionのnewStreamを使う
-async function sendMessageToPeer(conn, message) {
+async function sendMessageToPeer(conn, message, { quiet = false } = {}) {
   if (!appOnline) {
     console.warn('📴 offline中のため送信を中止しました');
     return;
@@ -461,7 +466,7 @@ async function sendMessageToPeer(conn, message) {
   };
 
   try {
-    console.log('🔍 newStream on', conn.remotePeer.toString())
+    if (!quiet) console.log('🔍 newStream on', conn.remotePeer.toString())
     let result;
     try {
       result = await conn.newStream(CHAT_PROTOCOL, streamOptions);
@@ -474,17 +479,17 @@ async function sendMessageToPeer(conn, message) {
       result = await libp2p.dialProtocol(conn.remotePeer, CHAT_PROTOCOL, streamOptions);
     }
 
-    console.log('🧩 newStream result =', result)
+    if (!quiet) console.log('🧩 newStream result =', result)
 
     const stream = result?.stream ?? result;
-    console.log('🧩 stream object =', stream)
+    if (!quiet) console.log('🧩 stream object =', stream)
 
     if (!stream?.sink) throw new Error('no stream.sink')
 
     await pipe([encoder.encode(message)], stream.sink)
-    console.log('✅ sent', message)
+    if (!quiet) console.log('✅ sent', message)
   } catch (err) {
-    console.error('🚨 newStream failed', err, err.code)
+    if (!quiet) console.error('🚨 newStream failed', err, err.code)
     throw err
   }
 }
@@ -600,6 +605,7 @@ async function sendMessageToPeer(conn, message) {
     let onlineHeartbeatTimer = null;
     let connectionMaintenanceTimer = null;
     let lastPublishedOnlineAddr = null;
+    let directReconnectFailures = 0;
 
     const ONLINE_HEARTBEAT_MS = 20_000;
 
@@ -767,6 +773,10 @@ async function sendMessageToPeer(conn, message) {
           if (directPreferredByMode()) {
             const directConnections = existing.filter((conn) => !isRelayPathAddr(conn.remoteAddr?.toString?.() ?? ""));
             if (directConnections.length > 0) {
+              directReconnectFailures = 0;
+              try {
+                await sendMessageToPeer(directConnections[0], KEEPALIVE_PAYLOAD, { quiet: true });
+              } catch (_) {}
               const relayConnections = existing.filter((conn) => isRelayCircuitAddr(conn.remoteAddr?.toString?.() ?? ""));
               if (relayConnections.length > 0) {
                 await Promise.allSettled(relayConnections.map((conn) => conn.close()));
@@ -779,12 +789,44 @@ async function sendMessageToPeer(conn, message) {
           }
         }
 
+        const candidates = candidateAddrsForTarget(targetPeerIdStr);
+        const directAddr = candidates.find((addr) => !isRelayPathAddr(addr)) ?? null;
+        const relayAddr = candidates.find((addr) => isRelayPathAddr(addr)) ?? null;
         const dialAddr = resolveTargetDialAddr();
         if (dialAddr) {
           if (relayRequiredByMode() && !isRelayAddr(dialAddr)) return;
           console.log("♻️ 接続維持: targetへ再接続を試行", dialAddr);
           await libp2p.dial(multiaddr(dialAddr));
+          if (directPreferredByMode()) {
+            if (directAddr && dialAddr === directAddr) {
+              directReconnectFailures = 0;
+            } else if (relayAddr && dialAddr === relayAddr) {
+              directReconnectFailures += 1;
+            }
+          }
           return;
+        }
+
+        if (directPreferredByMode() && directAddr) {
+          try {
+            console.log("♻️ 接続維持: direct再接続を試行", directAddr);
+            await libp2p.dial(multiaddr(directAddr));
+            directReconnectFailures = 0;
+            return;
+          } catch (directErr) {
+            directReconnectFailures += 1;
+            console.warn("⚠️ direct再接続失敗", directErr?.message || directErr);
+          }
+
+          if (relayAddr && directReconnectFailures >= 2) {
+            try {
+              console.warn("⚠️ direct失敗が続いたため relay へフォールバックします");
+              await libp2p.dial(multiaddr(relayAddr));
+              return;
+            } catch (relayErr) {
+              console.warn("⚠️ relayフォールバック失敗", relayErr?.message || relayErr);
+            }
+          }
         }
 
         console.log("♻️ 接続維持: target PeerIDへ再接続を試行", targetPeerIdStr);

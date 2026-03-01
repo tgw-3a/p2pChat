@@ -306,7 +306,9 @@ async function sendMessageToPeer(conn, message) {
 
   try {
     console.log('🔍 newStream on', conn.remotePeer.toString())
-    const result = await conn.newStream(CHAT_PROTOCOL);
+    const result = await conn.newStream(CHAT_PROTOCOL, {
+      runOnLimitedConnection: true,
+    });
 
     console.log('🧩 newStream result =', result)
 
@@ -491,11 +493,12 @@ async function sendMessageToPeer(conn, message) {
 
     function pickPreferredOnlineAddr() {
       if (RELAY_MULTIADDR) {
-        return `${RELAY_MULTIADDR}/p2p-circuit/webrtc/p2p/${libp2p.peerId.toString()}`;
+        // Prefer direct relay circuit path; /webrtc signaling path is flaky on some mobile browsers.
+        return `${RELAY_MULTIADDR}/p2p-circuit/p2p/${libp2p.peerId.toString()}`;
       }
 
       const addrs = libp2p.getMultiaddrs().map(a => a.toString());
-      return addrs.find(a => a.includes("/p2p-circuit") && !a.includes("/ip4/127.0.0.1/"))
+      return addrs.find(a => a.includes("/p2p-circuit") && !a.includes("/webrtc") && !a.includes("/ip4/127.0.0.1/"))
         || addrs.find(a => a.includes("/webrtc") && !a.includes("/ip4/127.0.0.1/"))
         || addrs[0];
     }

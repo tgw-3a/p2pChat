@@ -50,7 +50,6 @@ const isRelayPathAddr = (addr) => {
   if (RELAY_PEER_ID && addr.includes(`/p2p/${RELAY_PEER_ID}`)) return true;
   return false;
 };
-const isDirectMode = () => transportMode === TRANSPORT_MODES.WIREGUARD;
 console.log("📡 RELAY_MULTIADDR at libp2p setup:", RELAY_MULTIADDR);
 const App = async () => {
   // chat 画面以外では libp2p を起動しない
@@ -83,18 +82,8 @@ const App = async () => {
       minConnections: 1,
     },
     connectionGater: {
-      denyDialMultiaddr: async (addr) => {
-        if (!allowPeerNetworking) return true;
-        const value = addr?.toString?.() ?? String(addr ?? "");
-        if (isDirectMode() && isRelayPathAddr(value)) return true;
-        return false;
-      },
-      denyDialPeer: async (peerId) => {
-        if (!allowPeerNetworking) return true;
-        const id = peerId?.toString?.() ?? "";
-        if (isDirectMode() && RELAY_PEER_ID && id === RELAY_PEER_ID) return true;
-        return false;
-      },
+      denyDialMultiaddr: async () => !allowPeerNetworking,
+      denyDialPeer: async () => !allowPeerNetworking,
       denyOutboundConnection: async () => !allowPeerNetworking,
       denyInboundConnection: async () => !allowPeerNetworking,
     },
@@ -283,7 +272,7 @@ const App = async () => {
     }
   }
 
-  const relayAllowedByMode = () => transportMode !== TRANSPORT_MODES.WIREGUARD;
+  const relayAllowedByMode = () => true;
   const relayRequiredByMode = () => transportMode === TRANSPORT_MODES.RELAY;
   const directPreferredByMode = () => transportMode === TRANSPORT_MODES.WIREGUARD;
 
@@ -308,7 +297,7 @@ const App = async () => {
     const relayAddr = addrs.find((addr) => isRelayPathAddr(addr)) ?? null;
 
     if (relayRequiredByMode()) return relayAddr ?? directAddr;
-    if (directPreferredByMode()) return directAddr;
+    if (directPreferredByMode()) return directAddr ?? relayAddr;
     return relayAddr ?? directAddr;
   }
 
@@ -435,8 +424,7 @@ const App = async () => {
       return;
     }
     if (directPreferredByMode() && isRelayPathAddr(inputAddr)) {
-      console.warn("⚠️ WireGuard/Directモードでは relay アドレスを利用しません");
-      return;
+      console.warn("⚠️ WireGuard/Directモードですが direct アドレス未取得時は relay フォールバックを試行します");
     }
     const parsedPeerId = extractPeerIdFromAddr(inputAddr);
     if (parsedPeerId) {
@@ -530,7 +518,7 @@ async function sendMessageToPeer(conn, message) {
           throw new Error("Relayモードのため relay アドレスが必要です");
         }
         if (directPreferredByMode() && isRelayPathAddr(dialAddr)) {
-          throw new Error("WireGuard/Directモードのため relay 宛先へ再接続しません");
+          console.warn("⚠️ Directアドレス未取得のため relay で再接続を試行します");
         }
         console.log("🔁 targetに再接続を試行:", dialAddr);
         await libp2p.dial(multiaddr(dialAddr));
@@ -743,10 +731,17 @@ async function sendMessageToPeer(conn, message) {
     function startOnlineHeartbeat() {
       stopOnlineHeartbeat();
       onlineHeartbeatTimer = setInterval(async () => {
-        if (!appOnline || !lastPublishedOnlineAddr) return;
+        if (!appOnline) return;
 
-        const ok = await postOnlinePresence(lastPublishedOnlineAddr, { quiet: true });
-        if (ok) return;
+        const preferred = pickPreferredOnlineAddr();
+        const publishAddr = preferred || lastPublishedOnlineAddr;
+        if (!publishAddr) return;
+
+        const ok = await postOnlinePresence(publishAddr, { quiet: true });
+        if (ok) {
+          lastPublishedOnlineAddr = publishAddr;
+          return;
+        }
 
         // Fallback: try to refresh address and publish once more.
         const refreshed = await resolveOnlineAddr(20);
@@ -768,12 +763,25 @@ async function sendMessageToPeer(conn, message) {
       try {
         const targetPeerId = peerIdFromString(targetPeerIdStr);
         const existing = libp2p.getConnections(targetPeerId);
-        if (existing.length > 0) return;
+        if (existing.length > 0) {
+          if (directPreferredByMode()) {
+            const directConnections = existing.filter((conn) => !isRelayPathAddr(conn.remoteAddr?.toString?.() ?? ""));
+            if (directConnections.length > 0) {
+              const relayConnections = existing.filter((conn) => isRelayCircuitAddr(conn.remoteAddr?.toString?.() ?? ""));
+              if (relayConnections.length > 0) {
+                await Promise.allSettled(relayConnections.map((conn) => conn.close()));
+                console.log("✂️ direct接続確立のため relay 回線を閉じました:", relayConnections.length);
+              }
+              return;
+            }
+          } else {
+            return;
+          }
+        }
 
         const dialAddr = resolveTargetDialAddr();
         if (dialAddr) {
           if (relayRequiredByMode() && !isRelayAddr(dialAddr)) return;
-          if (directPreferredByMode() && isRelayPathAddr(dialAddr)) return;
           console.log("♻️ 接続維持: targetへ再接続を試行", dialAddr);
           await libp2p.dial(multiaddr(dialAddr));
           return;
@@ -895,21 +903,23 @@ async function sendMessageToPeer(conn, message) {
         /\/ip4\/172\.(1[6-9]|2[0-9]|3[0-1])\./.test(a);
       const notLocal = (a) => !a.includes("/ip6/::1/") && !isPrivateIpv4(a);
       const directAddr = pickDirectOnlineAddr(addrs, notLocal);
+      const myPeerId = libp2p.peerId.toString();
+      const reservationReady = RELAY_PEER_ID
+        ? addrs.some(a => a.includes(`/p2p/${RELAY_PEER_ID}/p2p-circuit/p2p/${myPeerId}`))
+        : addrs.some(a => a.includes("/p2p-circuit/p2p/"));
+      const relayAddr = (RELAY_MULTIADDR && reservationReady)
+        ? `${RELAY_MULTIADDR}/p2p-circuit/p2p/${myPeerId}`
+        : null;
       if (directPreferredByMode()) {
-        return directAddr;
+        return directAddr || relayAddr;
       }
 
       // When relay is configured, advertise only the address that actually exists
       // in our observed multiaddrs (means reservation is ready).
       if (RELAY_MULTIADDR && relayAllowedByMode()) {
-        const myPeerId = libp2p.peerId.toString();
-        const reservationReady = RELAY_PEER_ID
-          ? addrs.some(a => a.includes(`/p2p/${RELAY_PEER_ID}/p2p-circuit/p2p/${myPeerId}`))
-          : addrs.some(a => a.includes("/p2p-circuit/p2p/"));
-
-        if (reservationReady) {
+        if (relayAddr) {
           // Always publish the externally reachable relay hostname, not docker-internal 172.x address.
-          return `${RELAY_MULTIADDR}/p2p-circuit/p2p/${myPeerId}`;
+          return relayAddr;
         }
         if (!relayRequiredByMode() && directAddr) {
           return directAddr;

@@ -296,7 +296,11 @@ const App = async () => {
     try {
       await libp2p.dial(maddr)
     } catch (e) {
-      console.log(e)
+      const msg = e?.message || String(e);
+      if (msg.includes("NO_RESERVATION")) {
+        console.warn("⚠️ 相手の Relay 予約が見つかりません。相手にオンライン再登録を依頼してください。");
+      }
+      console.warn("接続失敗:", msg);
     }
   }
 
@@ -365,19 +369,18 @@ async function sendMessageToPeer(conn, message) {
 
         input.value = "";
 
-        const conn = await ensureTargetConnection();
-        if (!conn) {
-          console.warn('送信先への接続が見つかりません');
-          return;
-        }
-
         try {
+          const conn = await ensureTargetConnection();
+          if (!conn) {
+            console.warn('送信先への接続が見つかりません');
+            return;
+          }
           await sendMessageToPeer(conn, message);
           const p = document.createElement("p");
           p.textContent = "[あなた] " + message;
           box.appendChild(p);
         } catch (err) {
-          console.error('送信エラー:', err);
+          console.error('送信エラー:', err?.message || err);
         }
       }
     });
@@ -507,18 +510,34 @@ async function sendMessageToPeer(conn, message) {
     }
 
     function pickPreferredOnlineAddr() {
+      const addrs = libp2p.getMultiaddrs().map(a => a.toString());
+      const notLocal = (a) => !a.includes("/ip4/127.0.0.1/") && !a.includes("/ip6/::1/");
+
+      // When relay is configured, advertise only the address that actually exists
+      // in our observed multiaddrs (means reservation is ready).
       if (RELAY_MULTIADDR) {
-        // Prefer direct relay circuit path; /webrtc signaling path is flaky on some mobile browsers.
-        return `${RELAY_MULTIADDR}/p2p-circuit/p2p/${libp2p.peerId.toString()}`;
+        const viaConfiguredRelay = RELAY_PEER_ID
+          ? addrs.find(a => a.includes(`/p2p/${RELAY_PEER_ID}/p2p-circuit/p2p/`) && notLocal(a))
+          : null;
+        const anyRelayCircuit = addrs.find(a => a.includes("/p2p-circuit/p2p/") && notLocal(a));
+        return viaConfiguredRelay || anyRelayCircuit || null;
       }
 
-      const addrs = libp2p.getMultiaddrs().map(a => a.toString());
-      return addrs.find(a => a.includes("/p2p-circuit") && !a.includes("/webrtc") && !a.includes("/ip4/127.0.0.1/"))
-        || addrs.find(a => a.includes("/webrtc") && !a.includes("/ip4/127.0.0.1/"))
-        || addrs[0];
+      return addrs.find(a => a.includes("/p2p-circuit") && !a.includes("/webrtc") && notLocal(a))
+        || addrs.find(a => a.includes("/webrtc") && notLocal(a))
+        || addrs[0]
+        || null;
     }
 
     async function resolveOnlineAddr(maxTry = 40) {
+      if (RELAY_MULTIADDR) {
+        try {
+          await libp2p.dial(multiaddr(RELAY_MULTIADDR));
+        } catch (err) {
+          console.warn("⚠️ Relay への事前接続に失敗:", err?.message || err);
+        }
+      }
+
       for (let i = 0; i < maxTry; i++) {
         const addr = pickPreferredOnlineAddr();
         if (addr) return addr;

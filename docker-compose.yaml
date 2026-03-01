@@ -58,7 +58,8 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run
+    command: tunnel --no-autoupdate --protocol http2 run
+    restart: unless-stopped
     depends_on:
       - nginx
     env_file:

@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import {
+  KeyboardAvoidingView,
   ImageBackground,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +13,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassPanel } from "./src/components/GlassPanel";
 import { palette } from "./src/theme/palette";
 
@@ -28,8 +30,11 @@ const onlineFriends = ["test1", "test2", "pi-node", "mac-main"];
 type TransportMode = "auto" | "relay" | "wireguard";
 
 function AppScreen() {
+  const insets = useSafeAreaInsets();
   const [online, setOnline] = useState(false);
   const [message, setMessage] = useState("");
+  const [loginDraft, setLoginDraft] = useState("");
+  const [activeUser, setActiveUser] = useState("");
   const [transportMode, setTransportMode] = useState<TransportMode>("auto");
 
   const statusText = useMemo(() => (online ? "オンライン" : "オフライン"), [online]);
@@ -50,113 +55,154 @@ function AppScreen() {
           style={StyleSheet.absoluteFill}
         />
 
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Text style={styles.brand}>p2pChat Native</Text>
-            <View style={styles.headerRight}>
-              <Ionicons name="shield-checkmark-outline" size={18} color={palette.textSecondary} />
-              <Text style={styles.headerRightText}>E2E</Text>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+        >
+          <ScrollView
+            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 120 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          >
+            <View style={styles.header}>
+              <Text style={styles.brand}>p2pChat Native</Text>
+              <View style={styles.headerRight}>
+                <Ionicons name="shield-checkmark-outline" size={18} color={palette.textSecondary} />
+                <Text style={styles.headerRightText}>E2E</Text>
+              </View>
             </View>
-          </View>
 
-          <GlassPanel style={styles.heroPanel} blurIntensity={32}>
-            <Text style={styles.heroTitle}>Eagle Ridge Room</Text>
-            <Text style={styles.heroSubtitle}>Relay + Direct P2P Preview</Text>
-            <View style={styles.heroMetrics}>
-              <Metric icon="radio-outline" label="接続" value={online ? "Live" : "Idle"} />
-              <Metric icon="git-network-outline" label="Peer" value="4" />
-              <Metric icon="time-outline" label="遅延" value="92ms" />
-            </View>
-          </GlassPanel>
+            <GlassPanel style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionTitle}>ユーザー</Text>
+                <Text style={styles.sectionHint}>
+                  {activeUser ? `ログイン中: ${activeUser}` : "未ログイン"}
+                </Text>
+              </View>
+              <View style={styles.inputRow}>
+                <TextInput
+                  value={loginDraft}
+                  onChangeText={setLoginDraft}
+                  placeholder="ユーザー名 (例: test1)"
+                  placeholderTextColor="rgba(244,247,255,0.4)"
+                  style={styles.input}
+                  autoCapitalize="none"
+                />
+                <Pressable
+                  style={[styles.userBtn, !loginDraft.trim() && styles.userBtnDisabled]}
+                  disabled={!loginDraft.trim()}
+                  onPress={() => setActiveUser(loginDraft.trim())}
+                >
+                  <Text style={styles.userBtnText}>適用</Text>
+                </Pressable>
+              </View>
+            </GlassPanel>
 
-          <View style={styles.row}>
-            <Pressable
-              style={[styles.toggle, online ? styles.toggleOff : styles.toggleOn]}
-              onPress={() => setOnline(true)}
-            >
-              <Text style={styles.toggleText}>オンラインになる</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.toggle, online ? styles.toggleOffDanger : styles.toggleOff]}
-              onPress={() => setOnline(false)}
-            >
-              <Text style={styles.toggleText}>オフラインにする</Text>
-            </Pressable>
-          </View>
+            <GlassPanel style={styles.heroPanel} blurIntensity={32}>
+              <Text style={styles.heroTitle}>Eagle Ridge Room</Text>
+              <Text style={styles.heroSubtitle}>Relay + Direct P2P Preview</Text>
+              <View style={styles.heroMetrics}>
+                <Metric icon="radio-outline" label="接続" value={online ? "Live" : "Idle"} />
+                <Metric icon="git-network-outline" label="Peer" value="4" />
+                <Metric icon="time-outline" label="遅延" value="92ms" />
+              </View>
+            </GlassPanel>
 
-          <Text style={styles.status}>
-            ステータス: <Text style={{ color: statusColor }}>{statusText}</Text>
-          </Text>
-
-          <GlassPanel style={styles.section}>
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>接続モード</Text>
-              <Text style={styles.sectionHint}>{transportHint}</Text>
-            </View>
-            <View style={styles.transportRow}>
+            <View style={styles.row}>
               <Pressable
-                style={[styles.transportBtn, transportMode === "auto" && styles.transportBtnActive]}
-                onPress={() => setTransportMode("auto")}
+                style={[styles.toggle, online ? styles.toggleOff : styles.toggleOn, !activeUser && styles.toggleDisabled]}
+                onPress={() => setOnline(true)}
+                disabled={!activeUser}
               >
-                <Text style={styles.transportBtnText}>Auto</Text>
+                <Text style={styles.toggleText}>オンラインになる</Text>
               </Pressable>
               <Pressable
-                style={[styles.transportBtn, transportMode === "relay" && styles.transportBtnActive]}
-                onPress={() => setTransportMode("relay")}
+                style={[styles.toggle, online ? styles.toggleOffDanger : styles.toggleOff]}
+                onPress={() => setOnline(false)}
               >
-                <Text style={styles.transportBtnText}>Relay</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.transportBtn, transportMode === "wireguard" && styles.transportBtnActive]}
-                onPress={() => setTransportMode("wireguard")}
-              >
-                <Text style={styles.transportBtnText}>WireGuard</Text>
+                <Text style={styles.toggleText}>オフラインにする</Text>
               </Pressable>
             </View>
-          </GlassPanel>
 
-          <GlassPanel style={styles.section}>
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>オンラインの友達</Text>
-              <Text style={styles.sectionHint}>自動更新</Text>
-            </View>
-            <View style={styles.friendWrap}>
-              {onlineFriends.map((name) => (
-                <View key={name} style={styles.friendChip}>
-                  <View style={styles.onlineDot} />
-                  <Text style={styles.friendText}>{name}</Text>
+            <Text style={styles.status}>
+              ステータス: <Text style={{ color: statusColor }}>{statusText}</Text>
+            </Text>
+            {!activeUser && (
+              <Text style={styles.loginNote}>先にユーザー名を適用してください</Text>
+            )}
+
+            <GlassPanel style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionTitle}>接続モード</Text>
+                <Text style={styles.sectionHint}>{transportHint}</Text>
+              </View>
+              <View style={styles.transportRow}>
+                <Pressable
+                  style={[styles.transportBtn, transportMode === "auto" && styles.transportBtnActive]}
+                  onPress={() => setTransportMode("auto")}
+                >
+                  <Text style={styles.transportBtnText}>Auto</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.transportBtn, transportMode === "relay" && styles.transportBtnActive]}
+                  onPress={() => setTransportMode("relay")}
+                >
+                  <Text style={styles.transportBtnText}>Relay</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.transportBtn, transportMode === "wireguard" && styles.transportBtnActive]}
+                  onPress={() => setTransportMode("wireguard")}
+                >
+                  <Text style={styles.transportBtnText}>WireGuard</Text>
+                </Pressable>
+              </View>
+            </GlassPanel>
+
+            <GlassPanel style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionTitle}>オンラインの友達</Text>
+                <Text style={styles.sectionHint}>自動更新</Text>
+              </View>
+              <View style={styles.friendWrap}>
+                {onlineFriends.map((name) => (
+                  <View key={name} style={styles.friendChip}>
+                    <View style={styles.onlineDot} />
+                    <Text style={styles.friendText}>{name}</Text>
+                  </View>
+                ))}
+              </View>
+            </GlassPanel>
+
+            <GlassPanel style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionTitle}>メッセージ</Text>
+                <Text style={styles.sectionHint}>P2P stream</Text>
+              </View>
+
+              {seedMessages.map((m, i) => (
+                <View key={`${m.from}-${i}`} style={[styles.msg, m.from === "me" ? styles.msgMe : styles.msgPeer]}>
+                  <Text style={styles.msgLabel}>{m.from === "me" ? "あなた" : "相手"}</Text>
+                  <Text style={styles.msgBody}>{m.body}</Text>
                 </View>
               ))}
-            </View>
-          </GlassPanel>
 
-          <GlassPanel style={styles.section}>
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>メッセージ</Text>
-              <Text style={styles.sectionHint}>P2P stream</Text>
-            </View>
-
-            {seedMessages.map((m, i) => (
-              <View key={`${m.from}-${i}`} style={[styles.msg, m.from === "me" ? styles.msgMe : styles.msgPeer]}>
-                <Text style={styles.msgLabel}>{m.from === "me" ? "あなた" : "相手"}</Text>
-                <Text style={styles.msgBody}>{m.body}</Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  value={message}
+                  onChangeText={setMessage}
+                  placeholder="メッセージを入力"
+                  placeholderTextColor="rgba(244,247,255,0.4)"
+                  style={styles.input}
+                />
+                <Pressable style={styles.sendBtn}>
+                  <Ionicons name="paper-plane" size={16} color="#0A1A31" />
+                </Pressable>
               </View>
-            ))}
-
-            <View style={styles.inputRow}>
-              <TextInput
-                value={message}
-                onChangeText={setMessage}
-                placeholder="メッセージを入力"
-                placeholderTextColor="rgba(244,247,255,0.4)"
-                style={styles.input}
-              />
-              <Pressable style={styles.sendBtn}>
-                <Ionicons name="paper-plane" size={16} color="#0A1A31" />
-              </Pressable>
-            </View>
-          </GlassPanel>
-        </ScrollView>
+            </GlassPanel>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </ImageBackground>
     </SafeAreaView>
   );
@@ -181,6 +227,9 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   safe: {
     flex: 1,
     backgroundColor: palette.night900,
@@ -285,6 +334,9 @@ const styles = StyleSheet.create({
   toggleOffDanger: {
     backgroundColor: "rgba(244, 114, 182, 0.28)",
   },
+  toggleDisabled: {
+    opacity: 0.45,
+  },
   toggleText: {
     color: "#F4F7FF",
     fontWeight: "700",
@@ -294,6 +346,31 @@ const styles = StyleSheet.create({
   status: {
     color: palette.textSecondary,
     fontSize: 14,
+    fontFamily: "Avenir Next",
+  },
+  loginNote: {
+    color: "rgba(255, 216, 155, 0.9)",
+    fontSize: 12,
+    marginTop: -2,
+    fontFamily: "Avenir Next",
+  },
+  userBtn: {
+    minWidth: 68,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: palette.stroke,
+    backgroundColor: "rgba(72, 160, 238, 0.4)",
+  },
+  userBtnDisabled: {
+    opacity: 0.45,
+  },
+  userBtnText: {
+    color: palette.textPrimary,
+    fontSize: 13,
+    fontWeight: "700",
     fontFamily: "Avenir Next",
   },
   transportRow: {

@@ -16,6 +16,13 @@ npm install
 npm run start
 ```
 
+## Environment Notes
+
+- Recommended Node.js: `20 LTS` (Expo is most stable on LTS versions)
+- If iOS simulator launch fails from CLI, open Simulator manually first:
+  - `open -a Simulator`
+  - then press `i` in Expo terminal
+
 Then open:
 
 - iOS simulator: press `i`

@@ -437,6 +437,29 @@ async function sendMessageToPeer(conn, message) {
 
   // オンラインユーザー読み込みとオンライン・オフライン切り替え処理
   function setupOnlineStatus() {
+    let statusTransition = Promise.resolve();
+
+    function setStatusButtonsDisabled(disabled) {
+      const onlineBtn = document.getElementById("go-online");
+      const offlineBtn = document.getElementById("go-offline");
+      if (onlineBtn) onlineBtn.disabled = disabled;
+      if (offlineBtn) offlineBtn.disabled = disabled;
+    }
+
+    function runStatusTransition(name, task) {
+      statusTransition = statusTransition.then(async () => {
+        setStatusButtonsDisabled(true);
+        try {
+          await task();
+        } catch (err) {
+          console.error(`❌ ${name} 失敗:`, err);
+        } finally {
+          setStatusButtonsDisabled(false);
+        }
+      });
+      return statusTransition;
+    }
+
     async function closeAllConnections(maxRounds = 5) {
       for (let i = 0; i < maxRounds; i++) {
         const connections = libp2p.getConnections();
@@ -556,6 +579,25 @@ async function sendMessageToPeer(conn, message) {
       }
     }
 
+    function hasRelayConnection() {
+      if (!RELAY_PEER_ID) return false;
+      try {
+        return libp2p.getConnections(peerIdFromString(RELAY_PEER_ID)).length > 0;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    async function ensureRelayDial() {
+      if (!RELAY_MULTIADDR) return;
+      if (hasRelayConnection()) return;
+      try {
+        await libp2p.dial(multiaddr(RELAY_MULTIADDR));
+      } catch (err) {
+        console.warn("⚠️ Relay への接続試行に失敗:", err?.message || err);
+      }
+    }
+
     function pickPreferredOnlineAddr() {
       const addrs = libp2p.getMultiaddrs().map(a => a.toString());
       const isPrivateIpv4 = (a) =>
@@ -586,16 +628,11 @@ async function sendMessageToPeer(conn, message) {
         || null;
     }
 
-    async function resolveOnlineAddr(maxTry = 40) {
-      if (RELAY_MULTIADDR) {
-        try {
-          await libp2p.dial(multiaddr(RELAY_MULTIADDR));
-        } catch (err) {
-          console.warn("⚠️ Relay への事前接続に失敗:", err?.message || err);
-        }
-      }
-
+    async function resolveOnlineAddr(maxTry = 120) {
       for (let i = 0; i < maxTry; i++) {
+        if (RELAY_MULTIADDR && (i === 0 || i % 10 === 0 || !hasRelayConnection())) {
+          await ensureRelayDial();
+        }
         const addr = pickPreferredOnlineAddr();
         if (addr) return addr;
         await new Promise(r => setTimeout(r, 300));
@@ -607,7 +644,7 @@ async function sendMessageToPeer(conn, message) {
       loadOnlineFriends();
       setInterval(loadOnlineFriends, 5000);
 
-      document.getElementById("go-online").addEventListener("click", async () => {
+      document.getElementById("go-online").addEventListener("click", () => runStatusTransition("オンライン化", async () => {
         console.log("🕐 オンラインボタンが押されました");
         allowPeerNetworking = true;
         update(DOM.nodeStatus(), 'Connecting');
@@ -621,13 +658,13 @@ async function sendMessageToPeer(conn, message) {
           try { await closeAllConnections(); } catch (_) {}
           console.warn("⚠️ Multiaddr が取得できません");
         }
-      });
+      }));
 
-      document.getElementById("go-offline").addEventListener("click", setOffline);
+      document.getElementById("go-offline").addEventListener("click", () => runStatusTransition("オフライン化", () => setOffline()));
 
       window.addEventListener("offline", () => {
         console.warn("📴 ブラウザがオフラインになったためローカル接続を切断します");
-        setOffline({ notifyServer: false });
+        runStatusTransition("オフライン化(イベント)", () => setOffline({ notifyServer: false }));
       });
 
       window.addEventListener("beforeunload", () => {

@@ -402,7 +402,16 @@ async function sendMessageToPeer(conn, message) {
     async function loadOnlineFriends() {
       try {
         const response = await fetch("/api/online");
+        if (response.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
         if (!response.ok) throw new Error("Failed to load online friends");
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error("Unexpected response while loading online friends");
+        }
 
         const friends = await response.json();
         const ul = document.getElementById("online-friends-list");

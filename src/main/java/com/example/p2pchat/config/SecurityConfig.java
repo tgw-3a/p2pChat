@@ -11,7 +11,6 @@ import org.springframework.security.config.annotation.web.configurers.HeadersCon
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
-import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.DelegatingAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -86,7 +85,10 @@ public class SecurityConfig {
     public AuthenticationEntryPoint authenticationEntryPoint() {
         RequestMatcher apiMatcher = new AntPathRequestMatcher("/api/**");
         HttpStatusEntryPoint apiUnauthorized = new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED);
-        LoginUrlAuthenticationEntryPoint loginRedirect = new LoginUrlAuthenticationEntryPoint("/login");
+        AuthenticationEntryPoint loginRedirect = (request, response, authException) -> {
+            response.setStatus(HttpStatus.SEE_OTHER.value());
+            response.setHeader("Location", "/login");
+        };
 
         LinkedHashMap<RequestMatcher, AuthenticationEntryPoint> map = new LinkedHashMap<>();
         map.put(apiMatcher, apiUnauthorized);

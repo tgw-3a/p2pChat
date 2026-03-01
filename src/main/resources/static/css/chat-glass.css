@@ -101,6 +101,13 @@
   font-size: 0.82rem;
 }
 
+.connection-path-status {
+  margin-top: 8px;
+  color: #9ec5ff;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
 .glass-panel {
   border: 1px solid var(--glass-stroke);
   border-radius: 18px;

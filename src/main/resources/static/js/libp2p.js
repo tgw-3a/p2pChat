@@ -205,6 +205,7 @@ const App = async () => {
     loggingButtonDisable: () => document.getElementById('button-logging-disable'),
     transportModeSelect: () => document.getElementById('transport-mode-select'),
     transportModeNote: () => document.getElementById('transport-mode-note'),
+    connectionPathStatus: () => document.getElementById('connection-path-status'),
     outputQuery: () => document.getElementById('output'),
   }
 
@@ -316,6 +317,35 @@ const App = async () => {
     return selected;
   }
 
+  function refreshConnectionPathStatus() {
+    const el = DOM.connectionPathStatus();
+    if (!el) return;
+
+    if (!appOnline) {
+      update(el, "接続経路: オフライン");
+      return;
+    }
+
+    const addrs = libp2p.getConnections().map((c) => c.remoteAddr?.toString?.() ?? "");
+    if (addrs.length === 0) {
+      update(el, "接続経路: 未接続");
+      return;
+    }
+
+    const relayCount = addrs.filter((addr) => isRelayPathAddr(addr)).length;
+    const directCount = addrs.length - relayCount;
+
+    if (directCount > 0 && relayCount > 0) {
+      update(el, `接続経路: Direct接続中（Relay補助 ${relayCount}）`);
+      return;
+    }
+    if (directCount > 0) {
+      update(el, "接続経路: Direct接続中（Relay未使用）");
+      return;
+    }
+    update(el, `接続経路: Relayのみ（${relayCount}）`);
+  }
+
   update(DOM.nodePeerId(), libp2p.peerId.toString())
   update(DOM.nodeStatus(), 'Offline')
   setTransportMode(readTransportMode(), { persist: false, announce: false })
@@ -407,6 +437,7 @@ const App = async () => {
         container.appendChild(li)
       })
     }
+    refreshConnectionPathStatus();
   }, 1000)
 
   DOM.loggingButtonEnable().onclick = (e) => {

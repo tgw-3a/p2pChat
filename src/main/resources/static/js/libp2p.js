@@ -42,6 +42,7 @@ const TRANSPORT_MODES = Object.freeze({
 });
 let transportMode = TRANSPORT_MODES.AUTO;
 const CONNECTION_MAINTENANCE_MS = 25_000;
+let onlineFriendsSnapshot = [];
 console.log("📡 RELAY_MULTIADDR at libp2p setup:", RELAY_MULTIADDR);
 const App = async () => {
   // chat 画面以外では libp2p を起動しない
@@ -196,6 +197,15 @@ const App = async () => {
   }
 
   const isRelayAddr = (addr) => typeof addr === "string" && addr.includes("/p2p-circuit");
+  const extractPeerIdFromAddr = (addr) => {
+    if (typeof addr !== "string") return null;
+    const parts = addr.split("/p2p/");
+    if (parts.length < 2) return null;
+    const tail = parts[parts.length - 1];
+    if (!tail) return null;
+    const [peerId] = tail.split("/");
+    return peerId || null;
+  };
   const supportsNativeWireGuard = false;
 
   function normalizeTransportMode(value) {
@@ -255,9 +265,44 @@ const App = async () => {
     }
   }
 
-  const relayAllowedByMode = () => transportMode !== TRANSPORT_MODES.WIREGUARD;
+  const relayAllowedByMode = () => true;
   const relayRequiredByMode = () => transportMode === TRANSPORT_MODES.RELAY;
   const directPreferredByMode = () => transportMode === TRANSPORT_MODES.WIREGUARD;
+
+  function candidateAddrsForTarget(targetPeerId) {
+    if (!targetPeerId) return [];
+    const addrs = [];
+    if (targetMultiaddrStr && extractPeerIdFromAddr(targetMultiaddrStr) === targetPeerId) {
+      addrs.push(targetMultiaddrStr);
+    }
+    for (const friend of onlineFriendsSnapshot) {
+      const addr = friend?.multiaddr;
+      if (!addr) continue;
+      if (extractPeerIdFromAddr(addr) !== targetPeerId) continue;
+      if (!addrs.includes(addr)) addrs.push(addr);
+    }
+    return addrs;
+  }
+
+  function pickAddrByTransportMode(addrs) {
+    if (!Array.isArray(addrs) || addrs.length === 0) return null;
+    const directAddr = addrs.find((addr) => !isRelayAddr(addr)) ?? null;
+    const relayAddr = addrs.find((addr) => isRelayAddr(addr)) ?? null;
+
+    if (relayRequiredByMode()) return relayAddr ?? directAddr;
+    if (directPreferredByMode()) return directAddr ?? relayAddr;
+    return relayAddr ?? directAddr;
+  }
+
+  function resolveTargetDialAddr() {
+    if (!targetPeerIdStr) return null;
+    const selected = pickAddrByTransportMode(candidateAddrsForTarget(targetPeerIdStr));
+    if (selected && selected !== targetMultiaddrStr) {
+      targetMultiaddrStr = selected;
+      console.log("🎯 targetMultiaddr updated", targetMultiaddrStr);
+    }
+    return selected;
+  }
 
   update(DOM.nodePeerId(), libp2p.peerId.toString())
   update(DOM.nodeStatus(), 'Offline')
@@ -372,12 +417,11 @@ const App = async () => {
       return;
     }
     if (directPreferredByMode() && isRelayAddr(inputAddr)) {
-      console.warn("⚠️ WireGuard/Directモードでは relay アドレスを利用しません");
-      return;
+      console.warn("⚠️ WireGuard/Directモードですが direct アドレス未取得時は relay フォールバックを試行します");
     }
-    const idx = inputAddr.lastIndexOf("/p2p/")
-    if (idx !== -1) {
-      targetPeerIdStr = inputAddr.slice(idx + 5)
+    const parsedPeerId = extractPeerIdFromAddr(inputAddr);
+    if (parsedPeerId) {
+      targetPeerIdStr = parsedPeerId
       targetMultiaddrStr = inputAddr
       console.log("🎯 targetPeerId set to", targetPeerIdStr)
     }
@@ -461,15 +505,22 @@ async function sendMessageToPeer(conn, message) {
       const targetPeerId = peerIdFromString(targetPeerIdStr);
       let connections = libp2p.getConnections(targetPeerId);
 
-      if (connections.length === 0 && targetMultiaddrStr) {
-        if (relayRequiredByMode() && !isRelayAddr(targetMultiaddrStr)) {
+      const dialAddr = resolveTargetDialAddr();
+      if (connections.length === 0 && dialAddr) {
+        if (relayRequiredByMode() && !isRelayAddr(dialAddr)) {
           throw new Error("Relayモードのため relay アドレスが必要です");
         }
-        if (directPreferredByMode() && isRelayAddr(targetMultiaddrStr)) {
-          throw new Error("WireGuard/Directモードのため relay アドレスでは再接続しません");
+        if (directPreferredByMode() && isRelayAddr(dialAddr)) {
+          console.warn("⚠️ Directアドレス未取得のため relay で再接続を試行します");
         }
-        console.log("🔁 targetに再接続を試行:", targetMultiaddrStr);
-        await libp2p.dial(multiaddr(targetMultiaddrStr));
+        console.log("🔁 targetに再接続を試行:", dialAddr);
+        await libp2p.dial(multiaddr(dialAddr));
+        connections = libp2p.getConnections(targetPeerId);
+      }
+
+      if (connections.length === 0) {
+        console.log("🔁 target PeerIDへ再接続を試行:", targetPeerIdStr);
+        await libp2p.dial(targetPeerId);
         connections = libp2p.getConnections(targetPeerId);
       }
 
@@ -493,9 +544,14 @@ async function sendMessageToPeer(conn, message) {
           lastErr = err;
           if (!isTransientError(err)) throw err;
           console.warn("⚠️ 接続が一時状態です。再試行します");
-          if (targetMultiaddrStr) {
+          const retryAddr = resolveTargetDialAddr();
+          if (retryAddr) {
             try {
-              await libp2p.dial(multiaddr(targetMultiaddrStr));
+              await libp2p.dial(multiaddr(retryAddr));
+            } catch (_) {}
+          } else if (targetPeerIdStr) {
+            try {
+              await libp2p.dial(peerIdFromString(targetPeerIdStr));
             } catch (_) {}
           }
           await sleep(250 * (i + 1));
@@ -561,7 +617,7 @@ async function sendMessageToPeer(conn, message) {
       return statusTransition;
     }
 
-    async function closeAllConnections(maxRounds = 5) {
+    async function closeAllConnections(maxRounds = 5, { clearTarget = false } = {}) {
       for (let i = 0; i < maxRounds; i++) {
         const connections = libp2p.getConnections();
         if (connections.length === 0) break;
@@ -569,8 +625,10 @@ async function sendMessageToPeer(conn, message) {
         await new Promise(r => setTimeout(r, 100));
       }
       connMap.clear();
-      targetPeerIdStr = null;
-      targetMultiaddrStr = null;
+      if (clearTarget) {
+        targetPeerIdStr = null;
+        targetMultiaddrStr = null;
+      }
     }
 
     async function loadOnlineFriends() {
@@ -588,10 +646,14 @@ async function sendMessageToPeer(conn, message) {
         }
 
         const friends = await response.json();
+        onlineFriendsSnapshot = Array.isArray(friends) ? friends : [];
+        if (targetPeerIdStr) {
+          resolveTargetDialAddr();
+        }
         const ul = document.getElementById("online-friends-list");
         ul.innerHTML = "";
 
-        friends.forEach(friend => {
+        onlineFriendsSnapshot.forEach(friend => {
           const li = document.createElement("li");
           const button = document.createElement("button");
           button.textContent = friend.name;
@@ -600,9 +662,9 @@ async function sendMessageToPeer(conn, message) {
             const input = document.getElementById("input-multiaddr");
             input.value = friend.multiaddr;
             // Multiaddr から PeerId 部分を抜き出して保存
-            const idx = friend.multiaddr.lastIndexOf("/p2p/");
-            if (idx !== -1) {
-              targetPeerIdStr = friend.multiaddr.slice(idx + 5);
+            const parsedPeerId = extractPeerIdFromAddr(friend.multiaddr);
+            if (parsedPeerId) {
+              targetPeerIdStr = parsedPeerId;
               targetMultiaddrStr = friend.multiaddr;
               console.log("🎯 targetPeerId set to", targetPeerIdStr);
             }
@@ -682,17 +744,26 @@ async function sendMessageToPeer(conn, message) {
         await ensureRelayDial();
       }
 
-      if (!targetPeerIdStr || !targetMultiaddrStr) return;
-      if (relayRequiredByMode() && !isRelayAddr(targetMultiaddrStr)) return;
-      if (directPreferredByMode() && isRelayAddr(targetMultiaddrStr)) return;
+      if (!targetPeerIdStr) return;
 
       try {
         const targetPeerId = peerIdFromString(targetPeerIdStr);
         const existing = libp2p.getConnections(targetPeerId);
         if (existing.length > 0) return;
 
-        console.log("♻️ 接続維持: targetへ再接続を試行", targetPeerIdStr);
-        await libp2p.dial(multiaddr(targetMultiaddrStr));
+        const dialAddr = resolveTargetDialAddr();
+        if (dialAddr) {
+          if (relayRequiredByMode() && !isRelayAddr(dialAddr)) return;
+          if (directPreferredByMode() && isRelayAddr(dialAddr)) {
+            console.warn("⚠️ Directアドレス未取得のため relay で接続維持を試行します");
+          }
+          console.log("♻️ 接続維持: targetへ再接続を試行", dialAddr);
+          await libp2p.dial(multiaddr(dialAddr));
+          return;
+        }
+
+        console.log("♻️ 接続維持: target PeerIDへ再接続を試行", targetPeerIdStr);
+        await libp2p.dial(targetPeerId);
       } catch (err) {
         console.warn("⚠️ 接続維持: target再接続失敗", err?.message || err);
       }
@@ -808,13 +879,12 @@ async function sendMessageToPeer(conn, message) {
       const notLocal = (a) => !a.includes("/ip6/::1/") && !isPrivateIpv4(a);
       const directAddr = pickDirectOnlineAddr(addrs, notLocal);
 
-      if (directPreferredByMode()) {
-        return directAddr;
-      }
-
       // When relay is configured, advertise only the address that actually exists
       // in our observed multiaddrs (means reservation is ready).
       if (RELAY_MULTIADDR && relayAllowedByMode()) {
+        if (directPreferredByMode() && directAddr) {
+          return directAddr;
+        }
         const myPeerId = libp2p.peerId.toString();
         const reservationReady = RELAY_PEER_ID
           ? addrs.some(a => a.includes(`/p2p/${RELAY_PEER_ID}/p2p-circuit/p2p/${myPeerId}`))

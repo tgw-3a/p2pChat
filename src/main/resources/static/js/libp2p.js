@@ -28,6 +28,11 @@ let targetPeerIdStr = null;
 // peerIdStr -> Array<Connection>
 const connMap = new Map();
 const RELAY_MULTIADDR = process.env.RELAY_MULTIADDR;
+const RELAY_PEER_ID = RELAY_MULTIADDR?.match(/\/p2p\/([^/]+)$/)?.[1] ?? null;
+// ネットワーク接続可否（offline時は新規接続を拒否）
+let allowPeerNetworking = false;
+// UI上のオンライン状態（メッセージ送受信許可）
+let appOnline = false;
 console.log("📡 RELAY_MULTIADDR at libp2p setup:", RELAY_MULTIADDR);
 const App = async () => {
   const libp2p = await createLibp2p({
@@ -49,7 +54,10 @@ const App = async () => {
     connectionEncryption: [noise()],
     streamMuxers: [yamux({ keepAlive: true })],
     connectionGater: {
-      denyDialMultiaddr: async () => false,
+      denyDialMultiaddr: async () => !allowPeerNetworking,
+      denyDialPeer: async () => !allowPeerNetworking,
+      denyOutboundConnection: async () => !allowPeerNetworking,
+      denyInboundConnection: async () => !allowPeerNetworking,
     },
     peerDiscovery: [
       bootstrap({
@@ -68,6 +76,12 @@ const App = async () => {
   // 新しいメッセージ受信ハンドラ
   console.log("✅ chat handler registered");
   libp2p.handle(CHAT_PROTOCOL, async ({ stream }) => {
+    if (!appOnline) {
+      console.log('📴 offline中の受信streamを破棄しました');
+      try { await stream.close?.(); } catch (_) {}
+      return;
+    }
+
     try {
       for await (const part of stream.source) {
         if (part == null) continue;
@@ -134,7 +148,6 @@ const App = async () => {
 
   // Start the libp2p node so handlers and transports are active
   await libp2p.start();
-  let nodeStarted = true;
 
   globalThis.libp2p = libp2p
 
@@ -155,7 +168,7 @@ const App = async () => {
   }
 
   update(DOM.nodePeerId(), libp2p.peerId.toString())
-  update(DOM.nodeStatus(), 'Online')
+  update(DOM.nodeStatus(), 'Offline')
 
   libp2p.addEventListener('peer:connect', (e) => {
     /** @type {import('@libp2p/interface-connection').Connection | null} */
@@ -180,13 +193,23 @@ const App = async () => {
     if (!connMap.has(idStr)) connMap.set(idStr, []);
     connMap.get(idStr).push(conn);
 
-    if (!targetPeerIdStr) {
+    const isRelay = RELAY_PEER_ID != null && RELAY_PEER_ID === idStr;
+    if (!targetPeerIdStr && !isRelay) {
       targetPeerIdStr = idStr;
       console.log('🎯 auto‑selected targetPeerIdStr =', targetPeerIdStr);
+    } else if (isRelay) {
+      console.log('🛰️ relay接続のため targetPeerId 自動選択はスキップ');
     }
   });
   libp2p.addEventListener('peer:disconnect', (e) => {
-    const peerId = e?.detail?.remotePeer ?? e?.detail?.peer ?? null;
+    const detail = e?.detail;
+    const peerId =
+      detail?.remotePeer ??
+      detail?.peer ??
+      detail?.connection?.remotePeer ??
+      detail?.detail?.remotePeer ??
+      detail?.detail?.peer ??
+      null;
     const idStr  = peerId?.toString?.();
     if (idStr) {
       console.log('⚡ peer disconnect', idStr);
@@ -194,6 +217,12 @@ const App = async () => {
       if (targetPeerIdStr === idStr) targetPeerIdStr = null;  // reset auto‑target if needed
     } else {
       console.warn('⚡ peer disconnect (detail missing):', e);
+      // detailが取れない場合でも現行接続からマップを再構築して整合を取る
+      const active = new Set(libp2p.getConnections().map(c => c.remotePeer.toString()));
+      for (const peerIdStr of Array.from(connMap.keys())) {
+        if (!active.has(peerIdStr)) connMap.delete(peerIdStr);
+      }
+      if (targetPeerIdStr && !active.has(targetPeerIdStr)) targetPeerIdStr = null;
     }
   });
 
@@ -242,6 +271,10 @@ const App = async () => {
 
   DOM.connectButton().onclick = async (e) => {
     e.preventDefault()
+    if (!appOnline) {
+      console.warn("📴 offline中は接続できません");
+      return;
+    }
     let maddr = multiaddr(DOM.inputMultiaddr().value)
 
     console.log(maddr)
@@ -257,6 +290,11 @@ const App = async () => {
 
   // 新しいメッセージ送信関数: 既存ConnectionのnewStreamを使う
 async function sendMessageToPeer(conn, message) {
+  if (!appOnline) {
+    console.warn('📴 offline中のため送信を中止しました');
+    return;
+  }
+
   try {
     console.log('🔍 newStream on', conn.remotePeer.toString())
     const result = await conn.newStream(CHAT_PROTOCOL);
@@ -286,6 +324,11 @@ async function sendMessageToPeer(conn, message) {
       e.preventDefault();
       const message = input.value.trim();
       if (message !== "") {
+        if (!appOnline) {
+          console.warn("📴 offline中のため送信できません");
+          return;
+        }
+
         const p = document.createElement("p");
         p.textContent = "[あなた] " + message;
         box.appendChild(p);
@@ -331,27 +374,15 @@ async function sendMessageToPeer(conn, message) {
 
   // オンラインユーザー読み込みとオンライン・オフライン切り替え処理
   function setupOnlineStatus() {
-    async function ensureNodeStarted() {
-      if (nodeStarted) return;
-      await libp2p.start();
-      nodeStarted = true;
-      update(DOM.nodeStatus(), 'Online');
-      console.log('🟢 libp2p node started');
-    }
-
-    async function closeAllConnections() {
-      const connections = libp2p.getConnections();
-      await Promise.allSettled(connections.map(c => c.close()));
+    async function closeAllConnections(maxRounds = 5) {
+      for (let i = 0; i < maxRounds; i++) {
+        const connections = libp2p.getConnections();
+        if (connections.length === 0) break;
+        await Promise.allSettled(connections.map(c => c.close()));
+        await new Promise(r => setTimeout(r, 100));
+      }
       connMap.clear();
       targetPeerIdStr = null;
-    }
-
-    async function stopNodeIfRunning() {
-      if (!nodeStarted) return;
-      await libp2p.stop();
-      nodeStarted = false;
-      update(DOM.nodeStatus(), 'Offline');
-      console.log('🔴 libp2p node stopped');
     }
 
     async function loadOnlineFriends() {
@@ -387,11 +418,8 @@ async function sendMessageToPeer(conn, message) {
       }
     }
 
-    let isOnline = false;
-
     async function setOnline(multiaddr) {
       try {
-        await ensureNodeStarted();
         const res = await fetch("/api/online", {
           method: "POST",
           headers: { "Content-Type": "text/plain" },
@@ -405,14 +433,30 @@ async function sendMessageToPeer(conn, message) {
 
         document.getElementById("status-text").textContent = "🟢オンライン";
         document.getElementById("status-text").classList.replace("text-red-600", "text-green-600");
-        isOnline = true;
+        appOnline = true;
+        allowPeerNetworking = true;
+        update(DOM.nodeStatus(), 'Online');
         console.log("🟢 オンライン登録完了:", multiaddr);
       } catch (err) {
+        appOnline = false;
+        allowPeerNetworking = false;
+        update(DOM.nodeStatus(), 'Offline');
+        try { await closeAllConnections(); } catch (_) {}
         console.error("❌ オンライン登録失敗:", err);
       }
     }
 
     async function setOffline({ notifyServer = true } = {}) {
+      appOnline = false;
+      allowPeerNetworking = false;
+      update(DOM.nodeStatus(), 'Offline');
+
+      try {
+        await closeAllConnections();
+      } catch (err) {
+        console.error("接続クローズ失敗", err);
+      }
+
       let serverNotified = false;
 
       if (notifyServer) {
@@ -429,21 +473,8 @@ async function sendMessageToPeer(conn, message) {
         }
       }
 
-      try {
-        await closeAllConnections();
-      } catch (err) {
-        console.error("接続クローズ失敗", err);
-      }
-
-      try {
-        await stopNodeIfRunning();
-      } catch (err) {
-        console.error("node停止失敗", err);
-      }
-
       document.getElementById("status-text").textContent = "🔴オフライン";
       document.getElementById("status-text").classList.replace("text-green-600", "text-red-600");
-      isOnline = false;
       if (serverNotified) {
         console.log("🔴 オフライン登録完了");
       } else {
@@ -458,7 +489,7 @@ async function sendMessageToPeer(conn, message) {
         || addrs[0];
     }
 
-    async function resolveOnlineAddr(maxTry = 10) {
+    async function resolveOnlineAddr(maxTry = 40) {
       for (let i = 0; i < maxTry; i++) {
         const addr = pickPreferredOnlineAddr();
         if (addr) return addr;
@@ -473,17 +504,16 @@ async function sendMessageToPeer(conn, message) {
 
       document.getElementById("go-online").addEventListener("click", async () => {
         console.log("🕐 オンラインボタンが押されました");
-        try {
-          await ensureNodeStarted();
-        } catch (err) {
-          console.error("❌ libp2p node 起動失敗:", err);
-          return;
-        }
+        allowPeerNetworking = true;
+        update(DOM.nodeStatus(), 'Connecting');
         const addr = await resolveOnlineAddr();
         if (addr) {
           console.log("🔗 Multiaddr 取得成功:", addr);
           await setOnline(addr);
         } else {
+          allowPeerNetworking = false;
+          update(DOM.nodeStatus(), 'Offline');
+          try { await closeAllConnections(); } catch (_) {}
           console.warn("⚠️ Multiaddr が取得できません");
         }
       });
@@ -496,7 +526,7 @@ async function sendMessageToPeer(conn, message) {
       });
 
       window.addEventListener("beforeunload", () => {
-        if (isOnline) {
+        if (appOnline) {
           navigator.sendBeacon("/api/online/offline-beacon", "offline");
         }
       });
@@ -512,6 +542,10 @@ async function sendMessageToPeer(conn, message) {
   setupOnlineStatus();
 
   function connectTo(peerId) {
+    if (!appOnline) {
+      console.warn("📴 offline中は接続できません");
+      return;
+    }
     const p = document.createElement("p");
     p.textContent = "[接続] " + peerId + " に接続しました。";
     document.getElementById("chat-box").appendChild(p);

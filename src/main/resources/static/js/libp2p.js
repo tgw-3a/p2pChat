@@ -331,6 +331,7 @@ async function sendMessageToPeer(conn, message) {
     console.log('✅ sent', message)
   } catch (err) {
     console.error('🚨 newStream failed', err, err.code)
+    throw err
   }
 }
 
@@ -340,6 +341,14 @@ async function sendMessageToPeer(conn, message) {
     const form = document.getElementById("chat-form");
     const input = document.getElementById("chat-input");
     const box = document.getElementById("chat-box");
+
+    function isTransientError(err) {
+      const code = err?.code || "";
+      const msg = err?.message || String(err || "");
+      return code === "ERR_TRANSIENT_CONNECTION" || msg.includes("transient connection");
+    }
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     async function ensureTargetConnection() {
       if (!targetPeerIdStr) {
@@ -358,6 +367,35 @@ async function sendMessageToPeer(conn, message) {
       return connections[0] ?? null;
     }
 
+    async function sendWithRetry(message, maxTry = 4) {
+      let lastErr = null;
+
+      for (let i = 0; i < maxTry; i++) {
+        const conn = await ensureTargetConnection();
+        if (!conn) {
+          await sleep(200 * (i + 1));
+          continue;
+        }
+
+        try {
+          await sendMessageToPeer(conn, message);
+          return;
+        } catch (err) {
+          lastErr = err;
+          if (!isTransientError(err)) throw err;
+          console.warn("⚠️ 接続が一時状態です。再試行します");
+          if (targetMultiaddrStr) {
+            try {
+              await libp2p.dial(multiaddr(targetMultiaddrStr));
+            } catch (_) {}
+          }
+          await sleep(250 * (i + 1));
+        }
+      }
+
+      throw lastErr ?? new Error("送信先への接続が見つかりません");
+    }
+
     form.addEventListener("submit", async function(e) {
       e.preventDefault();
       const message = input.value.trim();
@@ -370,12 +408,7 @@ async function sendMessageToPeer(conn, message) {
         input.value = "";
 
         try {
-          const conn = await ensureTargetConnection();
-          if (!conn) {
-            console.warn('送信先への接続が見つかりません');
-            return;
-          }
-          await sendMessageToPeer(conn, message);
+          await sendWithRetry(message);
           const p = document.createElement("p");
           p.textContent = "[あなた] " + message;
           box.appendChild(p);
@@ -511,16 +544,26 @@ async function sendMessageToPeer(conn, message) {
 
     function pickPreferredOnlineAddr() {
       const addrs = libp2p.getMultiaddrs().map(a => a.toString());
-      const notLocal = (a) => !a.includes("/ip4/127.0.0.1/") && !a.includes("/ip6/::1/");
+      const isPrivateIpv4 = (a) =>
+        a.includes("/ip4/10.") ||
+        a.includes("/ip4/127.") ||
+        a.includes("/ip4/192.168.") ||
+        /\/ip4\/172\.(1[6-9]|2[0-9]|3[0-1])\./.test(a);
+      const notLocal = (a) => !a.includes("/ip6/::1/") && !isPrivateIpv4(a);
 
       // When relay is configured, advertise only the address that actually exists
       // in our observed multiaddrs (means reservation is ready).
       if (RELAY_MULTIADDR) {
-        const viaConfiguredRelay = RELAY_PEER_ID
-          ? addrs.find(a => a.includes(`/p2p/${RELAY_PEER_ID}/p2p-circuit/p2p/`) && notLocal(a))
-          : null;
-        const anyRelayCircuit = addrs.find(a => a.includes("/p2p-circuit/p2p/") && notLocal(a));
-        return viaConfiguredRelay || anyRelayCircuit || null;
+        const myPeerId = libp2p.peerId.toString();
+        const reservationReady = RELAY_PEER_ID
+          ? addrs.some(a => a.includes(`/p2p/${RELAY_PEER_ID}/p2p-circuit/p2p/${myPeerId}`))
+          : addrs.some(a => a.includes("/p2p-circuit/p2p/"));
+
+        if (reservationReady) {
+          // Always publish the externally reachable relay hostname, not docker-internal 172.x address.
+          return `${RELAY_MULTIADDR}/p2p-circuit/p2p/${myPeerId}`;
+        }
+        return null;
       }
 
       return addrs.find(a => a.includes("/p2p-circuit") && !a.includes("/webrtc") && notLocal(a))

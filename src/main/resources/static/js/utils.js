@@ -53,6 +53,9 @@ export function collectPeerDetails(libp2p) {
   })
 }
 export function update(element, newContent) {
+  if (element == null) {
+    return
+  }
   if (element.innerHTML !== newContent) {
     element.innerHTML = newContent
   }

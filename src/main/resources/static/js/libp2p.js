@@ -36,6 +36,12 @@ let allowPeerNetworking = false;
 let appOnline = false;
 console.log("📡 RELAY_MULTIADDR at libp2p setup:", RELAY_MULTIADDR);
 const App = async () => {
+  // chat 画面以外では libp2p を起動しない
+  if (document.getElementById('chat-form') == null) {
+    console.log('ℹ️ libp2p skipped: chat UI not found on this page');
+    return;
+  }
+
   const libp2p = await createLibp2p({
      addresses: {
        listen: [

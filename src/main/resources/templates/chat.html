@@ -5,17 +5,17 @@
     <meta charset="UTF-8"/>
     <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-        <script src="https://cdn.tailwindcss.com"></script>
-    // 開発中
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/chat-glass.css"/>
 <!--    <link rel="stylesheet" href="/css/output.css"/>-->
     <script type="module" src="/js/bundle.js"></script>
     <script>
         console.log("✅ JavaScript読み込まれました");
     </script>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans leading-relaxed">
-<main class="container mx-auto p-6 bg-gray-200 shadow-md rounded-xl mt-10 space-y-6">
-    <header class="mb-6">
+<body class="chat-glass-body bg-gray-50 text-gray-900 font-sans leading-relaxed">
+<main class="chat-shell container mx-auto p-6 bg-gray-200 shadow-md rounded-xl mt-10 space-y-6">
+    <header class="chat-header mb-6">
         <div class="flex justify-between items-center mb-4">
             <div>
                 <h1 class="font-bold text-3xl text-blue-600">チャット</h1>
@@ -29,27 +29,42 @@
             </div>
         </div>
     </header>
-    <span>ステータス: <span id="status-text" class="font-bold text-red-600">オフライン</span></span>
-    <div class="mt-1">
-        <button id="go-online"
-                class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
-            オンラインになる
-        </button>
-        <button id="go-offline"
-                class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
-            オフラインになる
-        </button>
-    </div>
-    <p class="text-red-500 text-sm mt-1">
-        ※ ブラウザを閉じる前に必ず「オフラインになる」ボタンを押してください。
-    </p>
+    <section class="glass-panel chat-status-panel">
+        <div class="chat-status-row">
+            <span class="chat-status-text">ステータス: <span id="status-text" class="font-bold text-red-600">オフライン</span></span>
+            <div class="transport-mode-wrap">
+                <label for="transport-mode-select" class="transport-mode-label">接続モード</label>
+                <select id="transport-mode-select" class="transport-mode-select">
+                    <option value="auto">Auto（推奨）</option>
+                    <option value="relay">Relay</option>
+                    <option value="wireguard">WireGuard/Direct</option>
+                </select>
+            </div>
+        </div>
+        <p id="transport-mode-note" class="transport-mode-note">
+            Auto: Relay優先で接続し、状況に応じて到達可能な経路を選びます。
+        </p>
+        <div class="mt-1">
+            <button id="go-online"
+                    class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                オンラインになる
+            </button>
+            <button id="go-offline"
+                    class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">
+                オフラインになる
+            </button>
+        </div>
+        <p class="text-red-500 text-sm mt-1">
+            ※ ブラウザを閉じる前に必ず「オフラインになる」ボタンを押してください。
+        </p>
+    </section>
     <section id="chat-box"
              class="bg-white border border-gray-300 h-96 overflow-auto p-4 rounded shadow-sm"
              role="log"
              aria-live="polite">
     </section>
 
-    <form id="chat-form" novalidate class="flex space-x-4">
+    <form id="chat-form" novalidate class="chat-form flex space-x-4">
         <input
                 type="text"
                 id="chat-input"
@@ -65,7 +80,7 @@
         </button>
     </form>
 
-    <section>
+    <section class="glass-panel">
         <h3 class="font-semibold text-lg text-gray-800 mb-2">友達リスト</h3>
         <ul id="static-friend-list" class="list-disc list-inside space-y-1 text-gray-700 mb-4">
             <li th:each="fn : ${friendNames}" th:text="${fn}"
@@ -85,7 +100,7 @@
         </ul>
     </section>
 
-    <section class="bg-white p-4 rounded shadow space-y-4">
+    <section class="glass-panel bg-white p-4 rounded shadow space-y-4">
         <ul class="list-none text-gray-700 space-y-2">
             <li>
                 Opened sessions in the last <span id="output-webtransport-opened-per-unit">0s</span>:
@@ -107,7 +122,7 @@
         </ul>
     </section>
 
-    <section class="bg-white p-4 rounded shadow space-y-4">
+    <section class="glass-panel bg-white p-4 rounded shadow space-y-4">
         <h2 class="font-bold text-xl text-blue-600 mb-2">Node</h2>
         <ul class="list-disc list-inside ml-4 text-gray-700 space-y-1">
             <li>Peer ID: <span class="font-bold" id="output-node-peer-id">Unknown</span></li>
@@ -123,7 +138,7 @@
         </ul>
     </section>
 
-    <section class="bg-white p-4 rounded shadow space-y-4">
+    <section class="glass-panel bg-white p-4 rounded shadow space-y-4">
         <h2 class="font-bold text-xl text-blue-600 mb-2">Peers</h2>
         <div class="flex flex-row items-center gap-2">
             <label class="block text-gray-700 text-sm font-semibold" for="input-multiaddr">Multiaddr</label>
@@ -145,7 +160,7 @@
         <ul class="list-disc list-inside ml-4 text-gray-700" id="output-peer-details"></ul>
     </section>
 
-    <section class="bg-white p-4 rounded shadow">
+    <section class="glass-panel bg-white p-4 rounded shadow">
         <h2 class="font-bold text-xl text-blue-600 mb-2">Output</h2>
         <pre class="bg-gray-200 p-4 rounded shadow-inner" id="output"></pre>
     </section>

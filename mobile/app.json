@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "p2pChat Mobile",
+    "slug": "p2pchat-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.oshake.p2pchat.mobile"
+    },
+    "android": {
+      "package": "com.oshake.p2pchat.mobile"
+    }
+  }
+}

@@ -34,6 +34,13 @@ const RELAY_PEER_ID = RELAY_MULTIADDR?.match(/\/p2p\/([^/]+)$/)?.[1] ?? null;
 let allowPeerNetworking = false;
 // UI上のオンライン状態（メッセージ送受信許可）
 let appOnline = false;
+const TRANSPORT_MODE_KEY = "p2pchat.transportMode";
+const TRANSPORT_MODES = Object.freeze({
+  AUTO: "auto",
+  RELAY: "relay",
+  WIREGUARD: "wireguard",
+});
+let transportMode = TRANSPORT_MODES.AUTO;
 console.log("📡 RELAY_MULTIADDR at libp2p setup:", RELAY_MULTIADDR);
 const App = async () => {
   // chat 画面以外では libp2p を起動しない
@@ -42,6 +49,7 @@ const App = async () => {
     return;
   }
 
+  const bootstrapPeers = RELAY_MULTIADDR ? [RELAY_MULTIADDR] : [];
   const libp2p = await createLibp2p({
      addresses: {
        listen: [
@@ -70,12 +78,14 @@ const App = async () => {
       denyOutboundConnection: async () => !allowPeerNetworking,
       denyInboundConnection: async () => !allowPeerNetworking,
     },
-    peerDiscovery: [
-      bootstrap({
-        list: [RELAY_MULTIADDR],
-        interval: 30_000
-      }),
-    ],
+    peerDiscovery: bootstrapPeers.length > 0
+      ? [
+          bootstrap({
+            list: bootstrapPeers,
+            interval: 30_000
+          }),
+        ]
+      : [],
     services: {
       pubsub: gossipsub(),
       identify: identify(),
@@ -148,6 +158,7 @@ const App = async () => {
         const box = document.getElementById('chat-box');
         if (box) {
           const p = document.createElement('p');
+          p.className = "chat-line chat-line-peer";
           p.textContent = '[相手] ' + message;
           box.appendChild(p);
         }
@@ -178,11 +189,78 @@ const App = async () => {
     connectButton: () => document.getElementById('button-connect'),
     loggingButtonEnable: () => document.getElementById('button-logging-enable'),
     loggingButtonDisable: () => document.getElementById('button-logging-disable'),
+    transportModeSelect: () => document.getElementById('transport-mode-select'),
+    transportModeNote: () => document.getElementById('transport-mode-note'),
     outputQuery: () => document.getElementById('output'),
   }
 
+  const isRelayAddr = (addr) => typeof addr === "string" && addr.includes("/p2p-circuit");
+  const supportsNativeWireGuard = false;
+
+  function normalizeTransportMode(value) {
+    if (value === TRANSPORT_MODES.RELAY) return TRANSPORT_MODES.RELAY;
+    if (value === TRANSPORT_MODES.WIREGUARD) return TRANSPORT_MODES.WIREGUARD;
+    return TRANSPORT_MODES.AUTO;
+  }
+
+  function readTransportMode() {
+    try {
+      return normalizeTransportMode(localStorage.getItem(TRANSPORT_MODE_KEY));
+    } catch (_) {
+      return TRANSPORT_MODES.AUTO;
+    }
+  }
+
+  function transportModeLabel(mode) {
+    if (mode === TRANSPORT_MODES.RELAY) return "Relay";
+    if (mode === TRANSPORT_MODES.WIREGUARD) return "WireGuard/Direct";
+    return "Auto";
+  }
+
+  function updateTransportModeUI() {
+    const select = DOM.transportModeSelect();
+    const note = DOM.transportModeNote();
+    if (select) {
+      select.value = transportMode;
+    }
+    if (!note) return;
+    if (transportMode === TRANSPORT_MODES.RELAY) {
+      note.textContent = "Relay: 中継経路を優先し、到達性を重視します。";
+      return;
+    }
+    if (transportMode === TRANSPORT_MODES.WIREGUARD) {
+      note.textContent = supportsNativeWireGuard
+        ? "WireGuard: 端末VPN経路を優先して中継を回避します。"
+        : "WireGuard/Direct: Web版ではWireGuard未対応のためDirect経路として動作します。";
+      return;
+    }
+    note.textContent = "Auto: Relay優先で接続し、状況に応じて到達可能な経路を選びます。";
+  }
+
+  function setTransportMode(next, { persist = true, announce = true } = {}) {
+    const normalized = normalizeTransportMode(next);
+    transportMode = normalized;
+    if (persist) {
+      try {
+        localStorage.setItem(TRANSPORT_MODE_KEY, normalized);
+      } catch (_) {}
+    }
+    updateTransportModeUI();
+    if (announce) {
+      console.log(`🧭 接続モード: ${transportModeLabel(normalized)}`);
+      if (normalized === TRANSPORT_MODES.WIREGUARD && !supportsNativeWireGuard) {
+        console.warn("⚠️ Web版ではWireGuardトンネルを直接利用できないため、Directモードとして扱います");
+      }
+    }
+  }
+
+  const relayAllowedByMode = () => transportMode !== TRANSPORT_MODES.WIREGUARD;
+  const relayRequiredByMode = () => transportMode === TRANSPORT_MODES.RELAY;
+  const directPreferredByMode = () => transportMode === TRANSPORT_MODES.WIREGUARD;
+
   update(DOM.nodePeerId(), libp2p.peerId.toString())
   update(DOM.nodeStatus(), 'Offline')
+  setTransportMode(readTransportMode(), { persist: false, announce: false })
 
   libp2p.addEventListener('peer:connect', (e) => {
     /** @type {import('@libp2p/interface-connection').Connection | null} */
@@ -288,6 +366,14 @@ const App = async () => {
     }
     let maddr = multiaddr(DOM.inputMultiaddr().value)
     const inputAddr = DOM.inputMultiaddr().value.trim()
+    if (relayRequiredByMode() && !isRelayAddr(inputAddr)) {
+      console.warn("⚠️ Relayモードでは relay アドレスのみ接続できます");
+      return;
+    }
+    if (directPreferredByMode() && isRelayAddr(inputAddr)) {
+      console.warn("⚠️ WireGuard/Directモードでは relay アドレスを利用しません");
+      return;
+    }
     const idx = inputAddr.lastIndexOf("/p2p/")
     if (idx !== -1) {
       targetPeerIdStr = inputAddr.slice(idx + 5)
@@ -375,6 +461,12 @@ async function sendMessageToPeer(conn, message) {
       let connections = libp2p.getConnections(targetPeerId);
 
       if (connections.length === 0 && targetMultiaddrStr) {
+        if (relayRequiredByMode() && !isRelayAddr(targetMultiaddrStr)) {
+          throw new Error("Relayモードのため relay アドレスが必要です");
+        }
+        if (directPreferredByMode() && isRelayAddr(targetMultiaddrStr)) {
+          throw new Error("WireGuard/Directモードのため relay アドレスでは再接続しません");
+        }
         console.log("🔁 targetに再接続を試行:", targetMultiaddrStr);
         await libp2p.dial(multiaddr(targetMultiaddrStr));
         connections = libp2p.getConnections(targetPeerId);
@@ -426,6 +518,7 @@ async function sendMessageToPeer(conn, message) {
         try {
           await sendWithRetry(message);
           const p = document.createElement("p");
+          p.className = "chat-line chat-line-me";
           p.textContent = "[あなた] " + message;
           box.appendChild(p);
         } catch (err) {
@@ -645,12 +738,20 @@ async function sendMessageToPeer(conn, message) {
 
     async function ensureRelayDial() {
       if (!RELAY_MULTIADDR) return;
+      if (!relayAllowedByMode()) return;
       if (hasRelayConnection()) return;
       try {
         await libp2p.dial(multiaddr(RELAY_MULTIADDR));
       } catch (err) {
         console.warn("⚠️ Relay への接続試行に失敗:", err?.message || err);
       }
+    }
+
+    function pickDirectOnlineAddr(addrs, notLocal) {
+      return addrs.find(a => !isRelayAddr(a) && a.includes("/webrtc") && notLocal(a))
+        || addrs.find(a => !isRelayAddr(a) && notLocal(a))
+        || addrs.find(a => !isRelayAddr(a))
+        || null;
     }
 
     function pickPreferredOnlineAddr() {
@@ -661,10 +762,15 @@ async function sendMessageToPeer(conn, message) {
         a.includes("/ip4/192.168.") ||
         /\/ip4\/172\.(1[6-9]|2[0-9]|3[0-1])\./.test(a);
       const notLocal = (a) => !a.includes("/ip6/::1/") && !isPrivateIpv4(a);
+      const directAddr = pickDirectOnlineAddr(addrs, notLocal);
+
+      if (directPreferredByMode()) {
+        return directAddr;
+      }
 
       // When relay is configured, advertise only the address that actually exists
       // in our observed multiaddrs (means reservation is ready).
-      if (RELAY_MULTIADDR) {
+      if (RELAY_MULTIADDR && relayAllowedByMode()) {
         const myPeerId = libp2p.peerId.toString();
         const reservationReady = RELAY_PEER_ID
           ? addrs.some(a => a.includes(`/p2p/${RELAY_PEER_ID}/p2p-circuit/p2p/${myPeerId}`))
@@ -674,20 +780,20 @@ async function sendMessageToPeer(conn, message) {
           // Always publish the externally reachable relay hostname, not docker-internal 172.x address.
           return `${RELAY_MULTIADDR}/p2p-circuit/p2p/${myPeerId}`;
         }
+        if (!relayRequiredByMode() && directAddr) {
+          return directAddr;
+        }
         return null;
       }
 
-      return addrs.find(a => a.includes("/p2p-circuit") && !a.includes("/webrtc") && notLocal(a))
-        || addrs.find(a => a.includes("/webrtc") && notLocal(a))
-        || addrs[0]
-        || null;
+      return directAddr || addrs[0] || null;
     }
 
     async function resolveOnlineAddr(maxTry = 120) {
       const relayFallbackAfter = 20; // about 6s (20 * 300ms)
 
       for (let i = 0; i < maxTry; i++) {
-        if (RELAY_MULTIADDR && (i === 0 || i % 10 === 0 || !hasRelayConnection())) {
+        if (RELAY_MULTIADDR && relayAllowedByMode() && (i === 0 || i % 10 === 0 || !hasRelayConnection())) {
           await ensureRelayDial();
         }
         const addr = pickPreferredOnlineAddr();
@@ -695,7 +801,7 @@ async function sendMessageToPeer(conn, message) {
 
         // If reservation propagation is slow after coming back online,
         // do not keep the user offline forever. Use relay-based fallback.
-        if (RELAY_MULTIADDR && i >= relayFallbackAfter && hasRelayConnection()) {
+        if (RELAY_MULTIADDR && relayAllowedByMode() && i >= relayFallbackAfter && hasRelayConnection()) {
           const fallback = `${RELAY_MULTIADDR}/p2p-circuit/p2p/${libp2p.peerId.toString()}`;
           console.warn("⚠️ Relay予約待ちが長いため、暫定アドレスでオンライン復帰します");
           return fallback;
@@ -707,6 +813,18 @@ async function sendMessageToPeer(conn, message) {
     }
 
     const runOnlineSetup = () => {
+      const modeSelect = DOM.transportModeSelect();
+      if (modeSelect) {
+        modeSelect.addEventListener("change", (e) => {
+          const selected = normalizeTransportMode(e?.target?.value);
+          setTransportMode(selected);
+          if (appOnline) {
+            console.warn("ℹ️ 接続モード変更を反映するにはオフライン→オンラインを実行してください");
+          }
+        });
+      }
+      updateTransportModeUI();
+
       loadOnlineFriends();
       setInterval(loadOnlineFriends, 5000);
 
@@ -755,6 +873,7 @@ async function sendMessageToPeer(conn, message) {
       return;
     }
     const p = document.createElement("p");
+    p.className = "chat-line chat-line-system";
     p.textContent = "[接続] " + peerId + " に接続しました。";
     document.getElementById("chat-box").appendChild(p);
 

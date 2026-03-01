@@ -438,6 +438,10 @@ async function sendMessageToPeer(conn, message) {
   // オンラインユーザー読み込みとオンライン・オフライン切り替え処理
   function setupOnlineStatus() {
     let statusTransition = Promise.resolve();
+    let onlineHeartbeatTimer = null;
+    let lastPublishedOnlineAddr = null;
+
+    const ONLINE_HEARTBEAT_MS = 20_000;
 
     function setStatusButtonsDisabled(disabled) {
       const onlineBtn = document.getElementById("go-online");
@@ -515,7 +519,9 @@ async function sendMessageToPeer(conn, message) {
       }
     }
 
-    async function setOnline(multiaddr) {
+    async function postOnlinePresence(multiaddr, { quiet = false } = {}) {
+      if (!multiaddr) return false;
+
       try {
         const res = await fetch("/api/online", {
           method: "POST",
@@ -523,27 +529,74 @@ async function sendMessageToPeer(conn, message) {
           body: multiaddr,
         });
 
+        if (res.status === 401) {
+          window.location.href = "/login";
+          return false;
+        }
+
         if (!res.ok) {
           const text = await res.text();
           throw new Error("HTTP " + res.status + ": " + text);
         }
+
+        return true;
+      } catch (err) {
+        if (!quiet) {
+          console.error("❌ オンライン登録失敗:", err);
+        }
+        return false;
+      }
+    }
+
+    function stopOnlineHeartbeat() {
+      if (onlineHeartbeatTimer != null) {
+        clearInterval(onlineHeartbeatTimer);
+        onlineHeartbeatTimer = null;
+      }
+    }
+
+    function startOnlineHeartbeat() {
+      stopOnlineHeartbeat();
+      onlineHeartbeatTimer = setInterval(async () => {
+        if (!appOnline || !lastPublishedOnlineAddr) return;
+
+        const ok = await postOnlinePresence(lastPublishedOnlineAddr, { quiet: true });
+        if (ok) return;
+
+        // Fallback: try to refresh address and publish once more.
+        const refreshed = await resolveOnlineAddr(20);
+        if (!refreshed) return;
+        lastPublishedOnlineAddr = refreshed;
+        await postOnlinePresence(refreshed, { quiet: true });
+      }, ONLINE_HEARTBEAT_MS);
+    }
+
+    async function setOnline(multiaddr) {
+      const ok = await postOnlinePresence(multiaddr);
+      if (ok) {
+        lastPublishedOnlineAddr = multiaddr;
+        startOnlineHeartbeat();
 
         document.getElementById("status-text").textContent = "🟢オンライン";
         document.getElementById("status-text").classList.replace("text-red-600", "text-green-600");
         appOnline = true;
         allowPeerNetworking = true;
         update(DOM.nodeStatus(), 'Online');
+        await loadOnlineFriends();
         console.log("🟢 オンライン登録完了:", multiaddr);
-      } catch (err) {
+      } else {
+        stopOnlineHeartbeat();
+        lastPublishedOnlineAddr = null;
         appOnline = false;
         allowPeerNetworking = false;
         update(DOM.nodeStatus(), 'Offline');
         try { await closeAllConnections(); } catch (_) {}
-        console.error("❌ オンライン登録失敗:", err);
       }
     }
 
     async function setOffline({ notifyServer = true } = {}) {
+      stopOnlineHeartbeat();
+      lastPublishedOnlineAddr = null;
       appOnline = false;
       allowPeerNetworking = false;
       update(DOM.nodeStatus(), 'Offline');

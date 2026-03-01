@@ -41,6 +41,7 @@ const TRANSPORT_MODES = Object.freeze({
   WIREGUARD: "wireguard",
 });
 let transportMode = TRANSPORT_MODES.AUTO;
+const CONNECTION_MAINTENANCE_MS = 25_000;
 console.log("📡 RELAY_MULTIADDR at libp2p setup:", RELAY_MULTIADDR);
 const App = async () => {
   // chat 画面以外では libp2p を起動しない
@@ -69,8 +70,8 @@ const App = async () => {
     connectionEncryption: [noise()],
     streamMuxers: [yamux({ keepAlive: true })],
     connectionManager: {
-      autoDial: false,
-      minConnections: 0,
+      autoDial: true,
+      minConnections: 1,
     },
     connectionGater: {
       denyDialMultiaddr: async () => !allowPeerNetworking,
@@ -534,6 +535,7 @@ async function sendMessageToPeer(conn, message) {
   function setupOnlineStatus() {
     let statusTransition = Promise.resolve();
     let onlineHeartbeatTimer = null;
+    let connectionMaintenanceTimer = null;
     let lastPublishedOnlineAddr = null;
 
     const ONLINE_HEARTBEAT_MS = 20_000;
@@ -650,6 +652,13 @@ async function sendMessageToPeer(conn, message) {
       }
     }
 
+    function stopConnectionMaintenance() {
+      if (connectionMaintenanceTimer != null) {
+        clearInterval(connectionMaintenanceTimer);
+        connectionMaintenanceTimer = null;
+      }
+    }
+
     function startOnlineHeartbeat() {
       stopOnlineHeartbeat();
       onlineHeartbeatTimer = setInterval(async () => {
@@ -666,11 +675,44 @@ async function sendMessageToPeer(conn, message) {
       }, ONLINE_HEARTBEAT_MS);
     }
 
+    async function maintainConnections() {
+      if (!appOnline) return;
+
+      if (relayAllowedByMode()) {
+        await ensureRelayDial();
+      }
+
+      if (!targetPeerIdStr || !targetMultiaddrStr) return;
+      if (relayRequiredByMode() && !isRelayAddr(targetMultiaddrStr)) return;
+      if (directPreferredByMode() && isRelayAddr(targetMultiaddrStr)) return;
+
+      try {
+        const targetPeerId = peerIdFromString(targetPeerIdStr);
+        const existing = libp2p.getConnections(targetPeerId);
+        if (existing.length > 0) return;
+
+        console.log("♻️ 接続維持: targetへ再接続を試行", targetPeerIdStr);
+        await libp2p.dial(multiaddr(targetMultiaddrStr));
+      } catch (err) {
+        console.warn("⚠️ 接続維持: target再接続失敗", err?.message || err);
+      }
+    }
+
+    function startConnectionMaintenance() {
+      stopConnectionMaintenance();
+      connectionMaintenanceTimer = setInterval(() => {
+        maintainConnections().catch((err) => {
+          console.warn("⚠️ 接続維持ループ失敗", err?.message || err);
+        });
+      }, CONNECTION_MAINTENANCE_MS);
+    }
+
     async function setOnline(multiaddr) {
       const ok = await postOnlinePresence(multiaddr);
       if (ok) {
         lastPublishedOnlineAddr = multiaddr;
         startOnlineHeartbeat();
+        startConnectionMaintenance();
 
         document.getElementById("status-text").textContent = "🟢オンライン";
         document.getElementById("status-text").classList.replace("text-red-600", "text-green-600");
@@ -681,6 +723,7 @@ async function sendMessageToPeer(conn, message) {
         console.log("🟢 オンライン登録完了:", multiaddr);
       } else {
         stopOnlineHeartbeat();
+        stopConnectionMaintenance();
         lastPublishedOnlineAddr = null;
         appOnline = false;
         allowPeerNetworking = false;
@@ -691,6 +734,7 @@ async function sendMessageToPeer(conn, message) {
 
     async function setOffline({ notifyServer = true } = {}) {
       stopOnlineHeartbeat();
+      stopConnectionMaintenance();
       lastPublishedOnlineAddr = null;
       appOnline = false;
       allowPeerNetworking = false;

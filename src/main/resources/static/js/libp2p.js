@@ -629,12 +629,23 @@ async function sendMessageToPeer(conn, message) {
     }
 
     async function resolveOnlineAddr(maxTry = 120) {
+      const relayFallbackAfter = 20; // about 6s (20 * 300ms)
+
       for (let i = 0; i < maxTry; i++) {
         if (RELAY_MULTIADDR && (i === 0 || i % 10 === 0 || !hasRelayConnection())) {
           await ensureRelayDial();
         }
         const addr = pickPreferredOnlineAddr();
         if (addr) return addr;
+
+        // If reservation propagation is slow after coming back online,
+        // do not keep the user offline forever. Use relay-based fallback.
+        if (RELAY_MULTIADDR && i >= relayFallbackAfter && hasRelayConnection()) {
+          const fallback = `${RELAY_MULTIADDR}/p2p-circuit/p2p/${libp2p.peerId.toString()}`;
+          console.warn("⚠️ Relay予約待ちが長いため、暫定アドレスでオンライン復帰します");
+          return fallback;
+        }
+
         await new Promise(r => setTimeout(r, 300));
       }
       return null;

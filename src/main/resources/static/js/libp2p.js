@@ -157,6 +157,7 @@ const App = async () => {
     }
   }, {
     runOnLimitedConnection: true,
+    runOnTransientConnection: true,
   });
 
   // Start the libp2p node so handlers and transports are active
@@ -314,11 +315,24 @@ async function sendMessageToPeer(conn, message) {
     return;
   }
 
+  const streamOptions = {
+    runOnLimitedConnection: true,
+    runOnTransientConnection: true,
+  };
+
   try {
     console.log('🔍 newStream on', conn.remotePeer.toString())
-    const result = await conn.newStream(CHAT_PROTOCOL, {
-      runOnLimitedConnection: true,
-    });
+    let result;
+    try {
+      result = await conn.newStream(CHAT_PROTOCOL, streamOptions);
+    } catch (err) {
+      const code = err?.code || "";
+      const msg = err?.message || String(err || "");
+      const isTransient = code === "ERR_TRANSIENT_CONNECTION" || msg.includes("transient connection");
+      if (!isTransient) throw err;
+      console.warn('⚠️ conn.newStream は transient 制約で失敗。dialProtocol で再試行します');
+      result = await libp2p.dialProtocol(conn.remotePeer, CHAT_PROTOCOL, streamOptions);
+    }
 
     console.log('🧩 newStream result =', result)
 

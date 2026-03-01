@@ -25,6 +25,7 @@ const decoder = new TextDecoder()
 
 // 直近で「接続」ボタンを押した相手の PeerId を保持
 let targetPeerIdStr = null;
+let targetMultiaddrStr = null;
 // peerIdStr -> Array<Connection>
 const connMap = new Map();
 const RELAY_MULTIADDR = process.env.RELAY_MULTIADDR;
@@ -53,6 +54,10 @@ const App = async () => {
     ],
     connectionEncryption: [noise()],
     streamMuxers: [yamux({ keepAlive: true })],
+    connectionManager: {
+      autoDial: false,
+      minConnections: 0,
+    },
     connectionGater: {
       denyDialMultiaddr: async () => !allowPeerNetworking,
       denyDialPeer: async () => !allowPeerNetworking,
@@ -144,6 +149,8 @@ const App = async () => {
     } catch (err) {
       console.error('❌ chat handler error:', err);
     }
+  }, {
+    runOnLimitedConnection: true,
   });
 
   // Start the libp2p node so handlers and transports are active
@@ -194,12 +201,7 @@ const App = async () => {
     connMap.get(idStr).push(conn);
 
     const isRelay = RELAY_PEER_ID != null && RELAY_PEER_ID === idStr;
-    if (!targetPeerIdStr && !isRelay) {
-      targetPeerIdStr = idStr;
-      console.log('🎯 auto‑selected targetPeerIdStr =', targetPeerIdStr);
-    } else if (isRelay) {
-      console.log('🛰️ relay接続のため targetPeerId 自動選択はスキップ');
-    }
+    if (isRelay) console.log('🛰️ relay peer connected');
   });
   libp2p.addEventListener('peer:disconnect', (e) => {
     const detail = e?.detail;
@@ -276,6 +278,13 @@ const App = async () => {
       return;
     }
     let maddr = multiaddr(DOM.inputMultiaddr().value)
+    const inputAddr = DOM.inputMultiaddr().value.trim()
+    const idx = inputAddr.lastIndexOf("/p2p/")
+    if (idx !== -1) {
+      targetPeerIdStr = inputAddr.slice(idx + 5)
+      targetMultiaddrStr = inputAddr
+      console.log("🎯 targetPeerId set to", targetPeerIdStr)
+    }
 
     console.log(maddr)
     try {
@@ -320,6 +329,23 @@ async function sendMessageToPeer(conn, message) {
     const input = document.getElementById("chat-input");
     const box = document.getElementById("chat-box");
 
+    async function ensureTargetConnection() {
+      if (!targetPeerIdStr) {
+        throw new Error("送信先が未選択です");
+      }
+
+      const targetPeerId = peerIdFromString(targetPeerIdStr);
+      let connections = libp2p.getConnections(targetPeerId);
+
+      if (connections.length === 0 && targetMultiaddrStr) {
+        console.log("🔁 targetに再接続を試行:", targetMultiaddrStr);
+        await libp2p.dial(multiaddr(targetMultiaddrStr));
+        connections = libp2p.getConnections(targetPeerId);
+      }
+
+      return connections[0] ?? null;
+    }
+
     form.addEventListener("submit", async function(e) {
       e.preventDefault();
       const message = input.value.trim();
@@ -329,40 +355,19 @@ async function sendMessageToPeer(conn, message) {
           return;
         }
 
-        const p = document.createElement("p");
-        p.textContent = "[あなた] " + message;
-        box.appendChild(p);
         input.value = "";
 
-        // --- 送信先 Connection を決定 (双方が connect 済み前提) ---
-        const connections = libp2p.getConnections();
-        let conn = null;
-
-        // 1) 事前にクリックして保存してある targetPeerIdStr で直接探す
-        if (targetPeerIdStr) {
-          conn = connections.find(c => c.remotePeer.toString() === targetPeerIdStr);
-        }
-
-        // 2) target が無い／見つからなかった場合、/chat/1.0.0 をアドバタイズしている peer を探す
+        const conn = await ensureTargetConnection();
         if (!conn) {
-          for (const c of connections) {
-            const pb = await libp2p.peerStore.protoBook.get(c.remotePeer);
-            if (pb?.protocols?.includes(CHAT_PROTOCOL)) {
-              conn = c;
-              targetPeerIdStr = c.remotePeer.toString();   // 今後のために覚えておく
-              break;
-            }
-          }
-        }
-
-        // 3) 見つからなければ諦める（自動ダイヤルは行わない）
-        if (!conn) {
-          console.warn('送信可能な接続が見つかりません');
+          console.warn('送信先への接続が見つかりません');
           return;
         }
 
         try {
           await sendMessageToPeer(conn, message);
+          const p = document.createElement("p");
+          p.textContent = "[あなた] " + message;
+          box.appendChild(p);
         } catch (err) {
           console.error('送信エラー:', err);
         }
@@ -383,6 +388,7 @@ async function sendMessageToPeer(conn, message) {
       }
       connMap.clear();
       targetPeerIdStr = null;
+      targetMultiaddrStr = null;
     }
 
     async function loadOnlineFriends() {
@@ -406,6 +412,7 @@ async function sendMessageToPeer(conn, message) {
             const idx = friend.multiaddr.lastIndexOf("/p2p/");
             if (idx !== -1) {
               targetPeerIdStr = friend.multiaddr.slice(idx + 5);
+              targetMultiaddrStr = friend.multiaddr;
               console.log("🎯 targetPeerId set to", targetPeerIdStr);
             }
             document.getElementById("button-connect").click();
@@ -483,9 +490,13 @@ async function sendMessageToPeer(conn, message) {
     }
 
     function pickPreferredOnlineAddr() {
+      if (RELAY_MULTIADDR) {
+        return `${RELAY_MULTIADDR}/p2p-circuit/webrtc/p2p/${libp2p.peerId.toString()}`;
+      }
+
       const addrs = libp2p.getMultiaddrs().map(a => a.toString());
-      return addrs.find(a => a.includes("/p2p-circuit"))
-        || addrs.find(a => a.includes("/webrtc"))
+      return addrs.find(a => a.includes("/p2p-circuit") && !a.includes("/ip4/127.0.0.1/"))
+        || addrs.find(a => a.includes("/webrtc") && !a.includes("/ip4/127.0.0.1/"))
         || addrs[0];
     }
 

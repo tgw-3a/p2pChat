@@ -1,9 +1,19 @@
-FROM eclipse-temurin:21-jdk
+FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 
-COPY . .
-COPY entrypoint-java.sh ./
-RUN chmod +x entrypoint-java.sh
+COPY gradlew gradlew
+COPY gradle gradle
+COPY build.gradle settings.gradle ./
+COPY src src
 
-# Relay 生成物を読み込んだ後で Java ビルドを行うため、ビルドは entrypoint に移す
-ENTRYPOINT ["./entrypoint-java.sh"]
+RUN chmod +x gradlew && ./gradlew bootJar -x test --no-daemon
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+
+COPY --from=build /app/build/libs/p2pchat-0.0.1-SNAPSHOT.jar /app/app.jar
+COPY entrypoint-java.sh /app/entrypoint-java.sh
+
+RUN chmod +x /app/entrypoint-java.sh
+
+ENTRYPOINT ["/app/entrypoint-java.sh"]
